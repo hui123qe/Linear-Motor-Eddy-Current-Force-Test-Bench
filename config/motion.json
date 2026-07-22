@@ -1,0 +1,13 @@
+{
+    "schemaVersion": 1,
+    "connection": {
+        "mode": "simulator",
+        "address": "192.168.124.2",
+        "port": 701
+    },
+    "controller": {
+        "axis": 0,
+        "countsPerMillimeter": 1.0
+    },
+    "pollIntervalMs": 50
+}

@@ -1,0 +1,18 @@
+Package: ACS Motion Control SPiiPlus C Library
+Library: ACSCL
+Version: 7.7.0.0
+Version source: include/ACSC.h (VERSION comment and ACSC_VER 0x7070000)
+Vendor: ACS Motion Control Ltd.
+Source: Vendor SDK files supplied locally; original installer/archive path is not recorded.
+Revision: Not applicable to the supplied binary SDK artifacts.
+License: Not supplied. Add the matching vendor EULA or license under licenses/ before redistribution.
+Producer: Not independently verified; the files identify ACS Motion Control Ltd. and ACSCL_x86/ACSCL_x64 DLLs.
+Artifact type: Microsoft COFF import libraries for Windows DLLs.
+Toolchain: MSVC-compatible import libraries; no MinGW import libraries are packaged.
+Architectures: x64 and x86.
+Configurations: One vendor import library per architecture, shared by Debug and Release consumers.
+Runtime: ACSCL_x64.dll and ACSCL_x86.dll are required but are not currently packaged.
+Header SHA256: 18CFB308E724D11C19DCF9677B9B672D407CD027CEB41555B96B12286044452B
+x64 import library SHA256: A2E9DF64B9DEF8747FF0AD0B2F311657AC8D794FC487D65F6CCA5B19DA7ADC0F
+x86 import library SHA256: 29D005866214A5CAF66ADCA37680621BCA34F10A99BAA66A838BE2423CAFD780
+Notes: Do not copy these .lib files into a mingw directory. Package a validated .dll.a per architecture or use ACSC_RUNTIME_DYNAMIC_LINKING for a MinGW consumer.

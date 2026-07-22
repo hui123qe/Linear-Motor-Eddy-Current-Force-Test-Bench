@@ -1,0 +1,490 @@
+* {
+    font-family: "Microsoft YaHei UI";
+    font-size: 14px;
+    color: #182f37;
+}
+
+QMainWindow, #applicationRoot {
+    background: #eef2f2;
+}
+
+#header {
+    background: #ffffff;
+    border-bottom: 1px solid #d7e0df;
+}
+
+#projectTitle {
+    color: #12333b;
+    font-size: 26px;
+    font-weight: 800;
+}
+
+#projectSubtitle, #pageDescription, #panelCaption, #railSubtitle,
+#stateDetail, #metricNote, #accountRole {
+    color: #5d7077;
+    font-size: 13px;
+}
+
+#sidebar {
+    background: #123c44;
+    border-right: 1px solid #092e34;
+}
+
+#navCaption {
+    color: #8eb2b7;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0 10px 5px 10px;
+}
+
+#sidebar QToolButton {
+    color: #e6f1f2;
+    background: #16454e;
+    border: none;
+    border-radius: 7px;
+    text-align: left;
+    padding: 11px 13px;
+    min-height: 24px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#sidebar QToolButton:hover {
+    background: #1f5862;
+    color: white;
+}
+
+#sidebar QToolButton:checked {
+    background: #071f24;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+#sidebar #divider {
+    color: #315c63;
+    background: #315c63;
+    border: none;
+    max-height: 1px;
+}
+
+#accountCard {
+    background: #0d333a;
+    border: 1px solid #315961;
+    border-radius: 8px;
+}
+
+#accountCaption, #accountRole {
+    color: #8eb2b7;
+}
+
+#accountName {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+#accountCard QPushButton {
+    color: #d7e8e9;
+    background: #234b53;
+    border-color: #3c6269;
+    padding: 6px 8px;
+}
+
+#pageStack {
+    background: #f3f6f6;
+}
+
+#pageTitle {
+    color: #12333b;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+#panel {
+    background: #ffffff;
+    border: 1px solid #d8e0df;
+    border-radius: 8px;
+}
+
+#panelTitle, #railTitle {
+    color: #173c44;
+    font-size: 17px;
+    font-weight: 800;
+}
+
+#taskBar {
+    background: #e8f2f1;
+    border: 1px solid #c9ddda;
+    border-radius: 8px;
+}
+
+#metricCard {
+    background: #f9fbfb;
+    border: 1px solid #dbe3e2;
+    border-radius: 7px;
+}
+
+#metricLabel {
+    color: #536970;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#metricValue {
+    color: #153b43;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+#blankCurve {
+    background: #fbfcfc;
+    border: 1px dashed #c5d1d0;
+    border-radius: 6px;
+    min-height: 180px;
+}
+
+#blankCurveText {
+    color: #a7b4b5;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#motionStateCard {
+    background: #f9fbfb;
+    border: 1px solid #dbe3e2;
+    border-radius: 7px;
+}
+
+#motionStateValue {
+    color: #0d6875;
+    font-size: 28px;
+    font-weight: 800;
+    padding: 8px 0;
+}
+
+#motionStateHelp {
+    color: #5d7077;
+    font-size: 12px;
+}
+
+#deviceRail {
+    background: #e8eeee;
+    border-left: 1px solid #d0dada;
+}
+
+#deviceGroup {
+    background: #ffffff;
+    border: 1px solid #d6dfde;
+    border-radius: 8px;
+}
+
+#deviceGroupTitle {
+    color: #38565c;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+#stateItem {
+    background: #f7f9f9;
+    border: 1px solid #e0e6e5;
+    border-radius: 6px;
+}
+
+#stateName {
+    color: #20383e;
+    font-weight: 700;
+}
+
+#statusPill {
+    border-radius: 11px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#statusPill[level="ok"] {
+    color: #167349;
+    background: #dff2e8;
+}
+
+#statusPill[level="info"] {
+    color: #176d80;
+    background: #deeff3;
+}
+
+#statusPill[level="warning"] {
+    color: #99630a;
+    background: #fff0d2;
+}
+
+#statusPill[level="danger"] {
+    color: #b52a2f;
+    background: #fde4e5;
+}
+
+#statusPill[level="neutral"] {
+    color: #68777b;
+    background: #e9eeee;
+}
+
+QPushButton {
+    color: #315159;
+    background: #ffffff;
+    border: 1px solid #bfcaca;
+    border-radius: 6px;
+    padding: 8px 13px;
+    min-height: 18px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    border-color: #177080;
+    color: #0c6170;
+    background: #f3f9f8;
+}
+
+QPushButton:pressed {
+    background: #e5f1ef;
+}
+
+QPushButton:disabled {
+    color: #9ba7a9;
+    background: #edf1f1;
+    border-color: #d7dddd;
+}
+
+QPushButton[buttonStyle="primary"] {
+    color: #ffffff;
+    background: #0d6875;
+    border-color: #0d6875;
+    font-weight: 700;
+}
+
+QPushButton[buttonStyle="primary"]:hover {
+    background: #0a5964;
+}
+
+QPushButton[buttonStyle="warning"] {
+    color: #8c5a08;
+    background: #fff7e7;
+    border-color: #e5c279;
+}
+
+QPushButton[buttonStyle="danger"], #emergencyStop {
+    color: #ffffff;
+    background: #c43236;
+    border: 2px solid #a82226;
+    font-weight: 800;
+    font-size: 15px;
+}
+
+QPushButton[buttonStyle="danger"]:hover, #emergencyStop:hover {
+    background: #ab2529;
+}
+
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    color: #20383e;
+    background: #ffffff;
+    border: 1px solid #c7d1d0;
+    border-radius: 5px;
+    padding: 7px 9px;
+    min-height: 20px;
+    selection-background-color: #0d6875;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #167486;
+}
+
+#fieldLabel, #sectionCaption {
+    color: #405a62;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#inlineConfigPanel {
+    background: #ffffff;
+    border: 1px solid #cbd7d6;
+    border-radius: 7px;
+}
+
+#globalConfigPanel {
+    background: #ffffff;
+    border: 1px solid #c9ddda;
+    border-radius: 8px;
+}
+
+#globalConfigTitle {
+    color: #173c44;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+#globalConfigDescription {
+    color: #5d7077;
+    font-size: 13px;
+}
+
+#readonlyValue {
+    color: #40585e;
+    background: #eef3f2;
+    border: 1px solid #d5dfde;
+    border-radius: 5px;
+    padding: 7px 9px;
+    min-height: 20px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#computedValue {
+    color: #12333b;
+    background: #edf6f5;
+    border: 1px solid #c9dfdc;
+    border-radius: 5px;
+    padding: 7px 9px;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+#constraintBox {
+    background: #fff8e8;
+    border: 1px solid #e5c279;
+    border-radius: 8px;
+}
+
+#constraintBox[level="ok"] {
+    background: #edf8f2;
+    border-color: #b9dccb;
+}
+
+#constraintBox[level="danger"] {
+    background: #fff0f0;
+    border-color: #e3a4a7;
+}
+
+#constraintTitle {
+    color: #29464d;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+#constraintText {
+    color: #405a62;
+    font-size: 13px;
+}
+
+#filterBar {
+    background: #ffffff;
+    border: 1px solid #d8e0df;
+    border-radius: 8px;
+}
+
+QTableWidget {
+    background: #ffffff;
+    alternate-background-color: #f7f9f9;
+    border: 1px solid #d8e0df;
+    border-radius: 6px;
+    gridline-color: #e3e8e7;
+    selection-background-color: #dceeed;
+    selection-color: #143b43;
+}
+
+QHeaderView::section {
+    color: #486268;
+    background: #edf2f1;
+    border: none;
+    border-right: 1px solid #d9e1e0;
+    border-bottom: 1px solid #d3dcdb;
+    padding: 9px 8px;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+QTabWidget::pane {
+    background: #ffffff;
+    border: 1px solid #d8e0df;
+    border-radius: 0 6px 6px 6px;
+}
+
+QTabBar::tab {
+    color: #597076;
+    background: #e7edec;
+    border: 1px solid #d2dcdb;
+    padding: 9px 18px;
+    margin-right: 2px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QTabBar::tab:selected {
+    color: #0d6875;
+    background: #ffffff;
+    border-bottom-color: #ffffff;
+    font-weight: 800;
+}
+
+QScrollArea {
+    background: transparent;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 7px;
+}
+
+QScrollBar::handle:vertical {
+    background: #b9c7c7;
+    border-radius: 3px;
+    min-height: 30px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+#emptyState {
+    background: #f8fbfa;
+    border: 1px dashed #c8d4d2;
+    border-radius: 7px;
+}
+
+#emptyTitle {
+    color: #2d585f;
+    font-size: 20px;
+    font-weight: 800;
+}
+
+#emptyCopy {
+    color: #75878b;
+}
+
+#bottomBar {
+    background: #ffffff;
+    border-top: 1px solid #d2dcdb;
+}
+
+#statusKey {
+    color: #536970;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#statusText {
+    color: #405a62;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#divider {
+    color: #e0e6e5;
+    background: #e0e6e5;
+    border: none;
+    max-height: 1px;
+}

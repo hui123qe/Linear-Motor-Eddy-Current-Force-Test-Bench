@@ -1,0 +1,21 @@
+{
+    "schemaVersion": 3,
+    "selectedTestType": "ratedSpeed",
+    "batch": {
+        "motorModel": "HIT-HSM-02",
+        "specimenId": "HIT-EC-017",
+        "repeatCount": 1
+    },
+    "ratedSpeedTest": {
+        "accelerationStartMeters": 0.0,
+        "accelerationDistanceMeters": 0.5,
+        "endPositionMeters": 1.7,
+        "speedMetersPerSecond": 3.0
+    },
+    "variableSpeedTest": {
+        "accelerationStartMeters": 0.0,
+        "accelerationDistanceMeters": 0.5,
+        "endPositionMeters": 1.7,
+        "speedMetersPerSecond": 3.0
+    }
+}

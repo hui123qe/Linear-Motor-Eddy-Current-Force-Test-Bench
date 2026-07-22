@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs2022-x64",
+      "displayName": "VS2022 x64 - Qt 6.5.3",
+      "description": "Visual Studio 2022 x64 using the installed Qt 6.5.3 MSVC package",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/build/vs2022-x64",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "D:/Qt/6.5.3/msvc2019_64",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/vs2022-x64"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vs2022-x64-debug",
+      "displayName": "Build Debug",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Debug",
+      "jobs": 8
+    },
+    {
+      "name": "vs2022-x64-release",
+      "displayName": "Build Release",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Release",
+      "jobs": 8
+    }
+  ]
+}
