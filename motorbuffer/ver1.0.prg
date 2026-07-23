@@ -1,5 +1,5 @@
 #/ Controller version = 4.20
-#/ Date = 7/20/2026 1:01 PM
+#/ Date = 7/22/2026 10:25 AM
 #/ User remarks = 
 #0
 !PNAME=
@@ -331,6 +331,32 @@ L_LOOP_INDEX = L_LOOP_INDEX + 1
 G_CURRENT_COUNT = L_LOOP_INDEX
 
 
+! 如果还有下一次循环，保持“返回零点”状态，等待上位机：
+!
+!   1. 停止并排空本次采集；
+!   2. 将本次数据异步提交到数据库；
+!   3. 创建下一次实验表；
+!   4. 重新置位 DCSTART_CON；
+!   5. 等待常驻采集 Buffer 置位 DCSTART，确认已经就绪。
+!
+! 这里只复用已有采集变量，不增加新的握手变量。
+IF L_LOOP_INDEX < L_REPEAT_COUNT
+
+    WHILE ^DCSTART_CON & ^G_ABORT_LATCH
+        WAIT 1
+    END
+
+    WHILE ^DCSTART & ^G_ABORT_LATCH
+        WAIT 1
+    END
+
+    IF G_ABORT_LATCH <> 0
+        GOTO HANDLE_ABORT
+    END
+
+END
+
+
 ! 继续下一次循环。
 GOTO TEST_LOOP
 
@@ -470,25 +496,13 @@ WHILE 1
 
 
     !--------------------------------------------------------
-    ! Wait for Axis 2 to start moving
+    ! Wait for Axis  to start moving
     !--------------------------------------------------------
-
-    IF DCSTART
-
-        ! Wait for motion or a stop request
-        WHILE DCSTART_CON & ^AST(0).#MOVE
-            WAIT 1
-        END
-
-        ! If collection was stopped before motion started,
-        ! return to the idle state
-        IF ^DCSTART_CON
-            DCSTART = 0
-        ELSE
-            DCSTART = 0
-        END
-
+    WHILE DCSTART_CON & ^AST(X).#MOVE
+        WAIT 1
     END
+
+    DCSTART = 0
 
 
     !--------------------------------------------------------
@@ -508,26 +522,31 @@ WHILE 1
         DC_ACTIVE_BLOCK = DCCOUNT
 
 
+        ! Clear metadata of this block before reuse
+        DC_BLOCK_VALID_COUNT(DCCOUNT - 1) = 0
+        DC_BLOCK_PARTIAL_MAP(DCCOUNT - 1) = 0
+
+
         ! Start data collection into the selected block
         IF DCCOUNT = 1
 
-            DC DC_Data_1, ARRAYCOUNT, 1, FACC(2), FVEL(2), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(2)
+            DC DC_Data_1, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
 
         ELSEIF DCCOUNT = 2
 
-            DC DC_Data_2, ARRAYCOUNT, 1, FACC(2), FVEL(2), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(2)
+            DC DC_Data_2, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
 
         ELSEIF DCCOUNT = 3
 
-            DC DC_Data_3, ARRAYCOUNT, 1, FACC(2), FVEL(2), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(2)
+            DC DC_Data_3, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
 
         ELSEIF DCCOUNT = 4
 
-            DC DC_Data_4, ARRAYCOUNT, 1,FACC(2), FVEL(2), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(2)
+            DC DC_Data_4, ARRAYCOUNT, 1,FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
 
         ELSEIF DCCOUNT = 5
 
-            DC DC_Data_5, ARRAYCOUNT, 1, FACC(2), FVEL(2), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(2)
+            DC DC_Data_5, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
 
         END
 
@@ -536,15 +555,52 @@ WHILE 1
         TILL ^S_ST.#DC
 
 
-        ! Only publish a completely collected block
-        IF DCSTART_CON
 
-            DC_FINISHED_BLOCK = DCCOUNT
+        !----------------------------------------------------
+        ! Capture S_DCN immediately
+        !
+        ! Normal completion:
+        !     S_DCN = ARRAYCOUNT
+        !
+        ! STOPDC:
+        !     0 <= S_DCN < ARRAYCOUNT
+        !----------------------------------------------------
+
+
+        DC_CURRENT_VALID_COUNT = S_DCN
+
+
+       IF DC_CURRENT_VALID_COUNT > 0
+
+            ! First write block metadata
+            DC_BLOCK_VALID_COUNT(DCCOUNT - 1) =   DC_CURRENT_VALID_COUNT
+
+            IF DC_CURRENT_VALID_COUNT < ARRAYCOUNT
+
+                DC_BLOCK_PARTIAL_MAP(DCCOUNT - 1) = 1
+
+            ELSE
+
+                DC_BLOCK_PARTIAL_MAP(DCCOUNT - 1) = 0
+
+            END
+
+
+            ! Generate new publication sequence
             DC_BLOCK_SEQUENCE = DC_BLOCK_SEQUENCE + 1
+
+            DC_BLOCK_SEQ_MAP(DCCOUNT - 1) =  DC_BLOCK_SEQUENCE
+
+
+            ! Publish latest block information
+            DC_FINISHED_BLOCK = DCCOUNT
+
+            DC_FINISHED_COUNT =  DC_CURRENT_VALID_COUNT
+
+            DC_FINISHED_PARTIAL =  DC_BLOCK_PARTIAL_MAP(DCCOUNT - 1)
 
         END
 
-        DC_ACTIVE_BLOCK = 0
 
     END
 
@@ -555,6 +611,7 @@ WHILE 1
 
     DC_ACTIVE_BLOCK = 0
     DCSTART = 0
+
 
 END
 
@@ -574,8 +631,7 @@ BLOCK
         STOPDC
     END
 
-    ! Notify the host that no block is being written
-    DC_ACTIVE_BLOCK = 0
+
 
 END
 
@@ -794,3 +850,13 @@ GLOBAL REAL DC_Data_2(6)(16666)
 GLOBAL REAL DC_Data_3(6)(16666)
 GLOBAL REAL DC_Data_4(6)(16666)
 GLOBAL REAL DC_Data_5(6)(16666)
+
+
+
+GLOBAL INT DC_FINISHED_COUNT
+GLOBAL INT DC_FINISHED_PARTIAL
+GLOBAL INT DC_CURRENT_VALID_COUNT
+
+GLOBAL INT DC_BLOCK_VALID_COUNT(5)
+GLOBAL INT DC_BLOCK_SEQ_MAP(5)
+GLOBAL INT DC_BLOCK_PARTIAL_MAP(5)

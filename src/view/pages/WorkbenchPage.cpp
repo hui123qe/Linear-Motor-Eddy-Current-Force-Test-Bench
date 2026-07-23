@@ -1,6 +1,9 @@
 #include "WorkbenchPage.h"
 
+#include "../../acquisition/DataAcquisitionService.h"
+#include "../../database/AcquisitionDatabaseService.h"
 #include "../../motion/MotionControlService.h"
+#include "../../workflow/TestExecutionService.h"
 #include "../components/chart/ChartWidget.h"
 #include "../widgets/MetricCard.h"
 #include "../widgets/StatusPill.h"
@@ -324,14 +327,57 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
                     QStringLiteral("停止测试"),
                     QStringLiteral("停止请求已发送。"));
             });
-    connect(&motionControlService,
-            &MotionControlService::commandFailed,
+    DataAcquisitionService& dataAcquisitionService =
+        DataAcquisitionService::instance();
+    connect(&dataAcquisitionService,
+            &DataAcquisitionService::readinessChanged,
+            this,
+            [this](bool ready, const QString& message) {
+                acquisitionReady_ = ready;
+                if (!ready && controllerConnected_) {
+                    currentStateValue_->setToolTip(message);
+                }
+                updateControlAvailability();
+            });
+    connect(&dataAcquisitionService,
+            &DataAcquisitionService::forceSamplesReady,
+            this,
+            &WorkbenchPage::appendEddyForceSamples);
+
+    AcquisitionDatabaseService& databaseService =
+        AcquisitionDatabaseService::instance();
+    connect(&databaseService,
+            &AcquisitionDatabaseService::readinessChanged,
+            this,
+            [this](bool ready, const QString& message) {
+                databaseReady_ = ready;
+                if (!ready) {
+                    currentStateValue_->setToolTip(message);
+                }
+                updateControlAvailability();
+            });
+
+    TestExecutionService& executionService = TestExecutionService::instance();
+    connect(&executionService,
+            &TestExecutionService::executionFinished,
+            this,
+            [this] {
+                setMotionCommandPending(false);
+            });
+    connect(&executionService,
+            &TestExecutionService::executionStopped,
+            this,
+            [this] {
+                setMotionCommandPending(false);
+            });
+    connect(&executionService,
+            &TestExecutionService::executionFailed,
             this,
             [this](const QString& message) {
                 pendingResultTargets_.reset();
                 setMotionCommandPending(false);
                 QMessageBox::warning(
-                    this, QStringLiteral("ACS 控制失败"), message);
+                    this, QStringLiteral("测试流程失败"), message);
             });
     connect(&resultService_,
             &TestResultService::resultCleared,
@@ -412,6 +458,7 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
     controllerConnected_ = connected;
     currentStateValue_->setToolTip(message);
     if (!connected) {
+        acquisitionReady_ = false;
         motionCommandPending_ = false;
         currentStateValue_->setText(QStringLiteral("ACS 未连接"));
         chartWidget_->start(false);
@@ -453,8 +500,9 @@ void WorkbenchPage::beginTest(const TestResultTargets& targets)
     }
 
     pendingResultTargets_ = targets;
+    clearChartData();
     QString errorMessage;
-    if (!MotionControlService::instance().start(
+    if (!TestExecutionService::instance().start(
             *configuration_, &errorMessage)) {
         pendingResultTargets_.reset();
         setMotionCommandPending(false);
@@ -466,7 +514,7 @@ void WorkbenchPage::beginTest(const TestResultTargets& targets)
 void WorkbenchPage::stopTest()
 {
     QString errorMessage;
-    if (MotionControlService::instance().stop(&errorMessage)) {
+    if (TestExecutionService::instance().stop(&errorMessage)) {
         return;
     }
 
@@ -482,6 +530,8 @@ void WorkbenchPage::updateControlAvailability()
     }
 
     startButton_->setEnabled(controllerConnected_
+                             && acquisitionReady_
+                             && databaseReady_
                              && configurationLocked_
                              && motionState_ == 0
                              && !motionCommandPending_);

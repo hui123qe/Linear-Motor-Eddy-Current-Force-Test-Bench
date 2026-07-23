@@ -61,9 +61,9 @@ MotionControlService::MotionControlService()
                         << "ACS 状态变化：state=" << status.state
                         << "errorCode=" << status.errorCode
                         << "currentCount=" << status.currentCount;
+                    currentStatus_ = status;
+                    emit motionStatusChanged(status);
                 }
-                currentStatus_ = status;
-                emit motionStatusChanged(status);
             });
     connect(client_,
             &AcsClient::startRequestWritten,
@@ -135,6 +135,11 @@ void MotionControlService::disconnectController()
     qCInfo(logMotion) << "请求断开 ACS 控制器";
     QMetaObject::invokeMethod(
         client_, &AcsClient::disconnectController, Qt::QueuedConnection);
+}
+
+AcsClient* MotionControlService::acsClient() const
+{
+    return client_;
 }
 
 bool MotionControlService::start(const TestParameters& parameters,

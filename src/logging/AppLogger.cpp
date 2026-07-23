@@ -12,6 +12,8 @@
 
 Q_LOGGING_CATEGORY(logApplication, "eddy.application")
 Q_LOGGING_CATEGORY(logMotion, "eddy.motion")
+Q_LOGGING_CATEGORY(logAcquisition, "eddy.acquisition")
+Q_LOGGING_CATEGORY(logDatabase, "eddy.database")
 Q_LOGGING_CATEGORY(logConfiguration, "eddy.configuration")
 
 namespace {

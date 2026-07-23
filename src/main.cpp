@@ -1,6 +1,9 @@
+#include "acquisition/DataAcquisitionService.h"
+#include "database/AcquisitionDatabaseService.h"
 #include "logging/AppLogger.h"
 #include "motion/MotionControlService.h"
 #include "view/MainWindow.h"
+#include "workflow/TestExecutionService.h"
 
 #include <QApplication>
 #include <QFile>
@@ -37,13 +40,23 @@ int main(int argc, char* argv[])
 
     MainWindow window;
     MotionControlService& motionControlService = MotionControlService::instance();
+    DataAcquisitionService& dataAcquisitionService =
+        DataAcquisitionService::instance();
+    AcquisitionDatabaseService& databaseService =
+        AcquisitionDatabaseService::instance();
+    TestExecutionService& executionService = TestExecutionService::instance();
     qCInfo(logApplication) << "初始化 ACS 电机服务";
     motionControlService.initialize();
+    dataAcquisitionService.initialize(motionControlService.acsClient());
+    databaseService.initialize();
     motionControlService.connectController();
     window.show();
 
     const int exitCode = application.exec();
     qCInfo(logApplication) << "应用事件循环结束，退出码" << exitCode;
+    executionService.shutdown();
+    dataAcquisitionService.shutdown();
+    databaseService.shutdown();
     motionControlService.shutdown();
     qCInfo(logApplication) << "应用退出";
     AppLogging::shutdown();

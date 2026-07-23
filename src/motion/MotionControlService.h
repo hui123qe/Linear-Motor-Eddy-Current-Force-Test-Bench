@@ -19,6 +19,7 @@ public:
 
     void connectController();
     void disconnectController();
+    [[nodiscard]] AcsClient* acsClient() const;
     [[nodiscard]] bool start(const TestParameters& parameters,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);

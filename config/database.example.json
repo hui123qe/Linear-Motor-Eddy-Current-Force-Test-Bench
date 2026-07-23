@@ -1,0 +1,10 @@
+{
+    "schemaVersion": 2,
+    "host": "127.0.0.1",
+    "port": 5432,
+    "databaseName": "eddy_current_bench",
+    "userName": "postgres",
+    "password": "",
+    "schemaName": "public",
+    "connectTimeoutSeconds": 5
+}

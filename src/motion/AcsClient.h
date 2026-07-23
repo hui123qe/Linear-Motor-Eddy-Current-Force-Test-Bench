@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../acquisition/AcquisitionTypes.h"
+
 #include <QMetaType>
 #include <QObject>
 #include <QString>
@@ -38,6 +40,9 @@ public slots:
     void disconnectController();
     void start(const MotionStartRequest& request);
     void stop();
+    void setCollectionEnabled(bool enabled);
+    void readCollectionMetadata();
+    void readCollectionBlock(int blockIndex, int expectedSequence);
 
 signals:
     void connectionChanged(bool connected, const QString& message);
@@ -45,6 +50,13 @@ signals:
     void startRequestWritten();
     void stopRequestWritten();
     void commandFailed(const QString& message);
+    void collectionControlWritten(bool enabled);
+    void collectionMetadataRead(const AcsCollectionMetadata& metadata);
+    void collectionBlockRead(const AcquisitionBlock& block);
+    void collectionBlockRejected(int blockIndex,
+                                 int expectedSequence,
+                                 const QString& message);
+    void collectionCommandFailed(const QString& message);
 
 private slots:
     void pollStatus();
@@ -62,6 +74,18 @@ private:
     [[nodiscard]] bool writeReal(const char* variable,
                                  double value,
                                  QString* errorMessage) const;
+    [[nodiscard]] bool readIntegerArray(const char* variable,
+                                        int firstIndex,
+                                        int lastIndex,
+                                        int* values,
+                                        QString* errorMessage) const;
+    [[nodiscard]] bool readRealMatrix(const char* variable,
+                                      int firstRow,
+                                      int lastRow,
+                                      int firstColumn,
+                                      int lastColumn,
+                                      double* values,
+                                      QString* errorMessage) const;
     [[nodiscard]] QString sdkError(const QString& action) const;
     void handleCommunicationFailure(const QString& message);
 

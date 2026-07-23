@@ -13,11 +13,40 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.5.3 REQUIRED COMPONENTS Widgets PrintSupport)
+set(DATABASE_CONFIGURATION_FILE
+    "${CMAKE_CURRENT_SOURCE_DIR}/config/database.json")
+if(NOT EXISTS "${DATABASE_CONFIGURATION_FILE}")
+    message(FATAL_ERROR
+        "Database configuration not found. Copy config/database.example.json "
+        "to config/database.json and provide the local credentials.")
+endif()
+
+find_package(Qt6 6.5.3 REQUIRED COMPONENTS Widgets PrintSupport Sql)
+
+if(NOT TARGET Qt6::QPSQLDriverPlugin)
+    message(FATAL_ERROR "Qt QPSQL driver plugin target is unavailable.")
+endif()
 
 add_subdirectory(third_party/qcustomplot)
 
 set(ACSCL_PACKAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/acs")
+set(POSTGRESQL_RUNTIME_DIR "D:/Tool/postgresql/bin" CACHE PATH
+    "Directory containing the PostgreSQL x64 client runtime DLLs")
+set(POSTGRESQL_RUNTIME_DLLS
+    libpq.dll
+    libssl-3-x64.dll
+    libcrypto-3-x64.dll
+    libintl-9.dll
+    libiconv-2.dll
+    libwinpthread-1.dll
+)
+foreach(POSTGRESQL_RUNTIME_DLL IN LISTS POSTGRESQL_RUNTIME_DLLS)
+    if(NOT EXISTS "${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}")
+        message(FATAL_ERROR
+            "PostgreSQL runtime DLL not found: ${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}")
+    endif()
+endforeach()
+
 if(NOT MSVC)
     message(FATAL_ERROR "The packaged ACSCL SDK only provides MSVC-compatible artifacts.")
 endif()
@@ -53,10 +82,17 @@ qt_add_executable(EddyCurrentBench
     src/config/TestConfigurationService.cpp
     src/result/TestResultService.h
     src/result/TestResultService.cpp
+    src/acquisition/AcquisitionTypes.h
+    src/acquisition/DataAcquisitionService.h
+    src/acquisition/DataAcquisitionService.cpp
+    src/database/AcquisitionDatabaseService.h
+    src/database/AcquisitionDatabaseService.cpp
     src/motion/AcsClient.h
     src/motion/AcsClient.cpp
     src/motion/MotionControlService.h
     src/motion/MotionControlService.cpp
+    src/workflow/TestExecutionService.h
+    src/workflow/TestExecutionService.cpp
     src/view/MainWindow.h
     src/view/MainWindow.cpp
     src/view/HeaderBar.h
@@ -99,6 +135,7 @@ qt_add_executable(EddyCurrentBench
 
 target_link_libraries(EddyCurrentBench PRIVATE
     Qt6::Widgets
+    Qt6::Sql
     QCustomPlot::QCustomPlot
     ThirdParty::acscl
 )
@@ -113,16 +150,51 @@ set_target_properties(EddyCurrentBench PROPERTIES
 )
 
 add_custom_command(TARGET EddyCurrentBench POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:EddyCurrentBench>/sqldrivers"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::QPSQLDriverPlugin>"
+        "$<TARGET_FILE_DIR:EddyCurrentBench>/sqldrivers/"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/config/motion.json"
         "$<TARGET_FILE_DIR:EddyCurrentBench>/motion.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${DATABASE_CONFIGURATION_FILE}"
+        "$<TARGET_FILE_DIR:EddyCurrentBench>/database.json"
     VERBATIM
 )
+
+foreach(POSTGRESQL_RUNTIME_DLL IN LISTS POSTGRESQL_RUNTIME_DLLS)
+    add_custom_command(TARGET EddyCurrentBench POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}"
+            "$<TARGET_FILE_DIR:EddyCurrentBench>/"
+        VERBATIM
+    )
+endforeach()
 
 install(TARGETS EddyCurrentBench
     RUNTIME DESTINATION bin
 )
 
-install(FILES config/motion.json
+install(FILES
+    config/motion.json
+    "${DATABASE_CONFIGURATION_FILE}"
     DESTINATION bin
+)
+
+install(FILES "$<TARGET_FILE:Qt6::QPSQLDriverPlugin>"
+    DESTINATION bin/sqldrivers
+)
+
+foreach(POSTGRESQL_RUNTIME_DLL IN LISTS POSTGRESQL_RUNTIME_DLLS)
+    install(FILES "${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}"
+        DESTINATION bin
+    )
+endforeach()
+
+install(FILES
+    "${POSTGRESQL_RUNTIME_DIR}/../server_license.txt"
+    "${POSTGRESQL_RUNTIME_DIR}/../commandlinetools_3rd_party_licenses.txt"
+    DESTINATION licenses/postgresql
 )
