@@ -6,10 +6,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QStringList>
 #include <QTimer>
 
 #include <array>
@@ -47,6 +49,35 @@ QString configurationFilePath()
 {
     return QDir(QCoreApplication::applicationDirPath())
         .filePath(QStringLiteral("motion.json"));
+}
+
+QString integerArrayText(
+    const std::array<int, kAcquisitionBlockCount>& values)
+{
+    QStringList items;
+    items.reserve(kAcquisitionBlockCount);
+    for (const int value : values) {
+        items.append(QString::number(value));
+    }
+    return QStringLiteral("[%1]").arg(items.join(QLatin1Char(',')));
+}
+
+QString metadataText(const AcsCollectionMetadata& metadata)
+{
+    return QStringLiteral(
+               "control=%1 armed=%2 active=%3 finished=%4 published=%5 "
+               "finishedCount=%6 finishedPartial=%7 validCounts=%8 "
+               "partialFlags=%9 blockSequences=%10")
+        .arg(metadata.controlEnabled)
+        .arg(metadata.armed)
+        .arg(metadata.activeBlock)
+        .arg(metadata.finishedBlock)
+        .arg(metadata.publishedSequence)
+        .arg(metadata.finishedCount)
+        .arg(metadata.finishedPartial ? 1 : 0)
+        .arg(integerArrayText(metadata.validCounts))
+        .arg(integerArrayText(metadata.partialFlags))
+        .arg(integerArrayText(metadata.blockSequences));
 }
 
 } // namespace
@@ -200,7 +231,12 @@ void AcsClient::stop()
 
 void AcsClient::setCollectionEnabled(bool enabled)
 {
+    qCInfo(logAcquisition)
+        << "[采集流程][ACS 控制写入] 开始，DCSTART_CON="
+        << (enabled ? 1 : 0);
     if (controllerHandle_ == ACSC_INVALID) {
+        qCCritical(logAcquisition)
+            << "[采集流程][ACS 控制写入] 失败：控制器未连接";
         emit collectionCommandFailed(
             QStringLiteral("ACS 控制器未连接，不能更改采集状态。"));
         return;
@@ -208,19 +244,28 @@ void AcsClient::setCollectionEnabled(bool enabled)
 
     QString errorMessage;
     if (!writeInteger("DCSTART_CON", enabled ? 1 : 0, &errorMessage)) {
-        qCCritical(logAcquisition).noquote() << errorMessage;
+        qCCritical(logAcquisition).noquote()
+            << "[采集流程][ACS 控制写入] SDK 写入失败，message="
+            << errorMessage;
         emit collectionCommandFailed(errorMessage);
         return;
     }
 
     qCInfo(logAcquisition)
-        << "ACS DCSTART_CON 已写入" << (enabled ? 1 : 0);
+        << "[采集流程][ACS 控制写入] 成功并发送回执，DCSTART_CON="
+        << (enabled ? 1 : 0);
     emit collectionControlWritten(enabled);
 }
 
 void AcsClient::readCollectionMetadata()
 {
+    QElapsedTimer readTimer;
+    readTimer.start();
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 元数据读取] 开始：依次读取 7 个标量和 3 个块数组";
     if (controllerHandle_ == ACSC_INVALID) {
+        qCCritical(logAcquisition)
+            << "[采集流程][ACS 元数据读取] 失败：控制器未连接";
         emit collectionCommandFailed(
             QStringLiteral("ACS 控制器未连接，不能读取采集元数据。"));
         return;
@@ -257,23 +302,44 @@ void AcsClient::readCollectionMetadata()
             metadata.blockSequences.data(),
             &errorMessage);
     if (!readSucceeded) {
+        qCCritical(logAcquisition).noquote()
+            << "[采集流程][ACS 元数据读取] SDK 读取失败，elapsedMs="
+            << readTimer.elapsed()
+            << "message=" << errorMessage;
         emit collectionCommandFailed(errorMessage);
         return;
     }
 
     metadata.finishedPartial = finishedPartial != 0;
+    qCDebug(logAcquisition).noquote()
+        << "[采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs="
+        << readTimer.elapsed()
+        << metadataText(metadata);
     emit collectionMetadataRead(metadata);
 }
 
 void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
 {
+    QElapsedTimer readTimer;
+    readTimer.start();
+    qCInfo(logAcquisition)
+        << "[采集流程][ACS 块读取] 开始，block=" << blockIndex
+        << "expected=" << expectedSequence;
     if (controllerHandle_ == ACSC_INVALID) {
+        qCCritical(logAcquisition)
+            << "[采集流程][ACS 块读取] 失败：控制器未连接，block="
+            << blockIndex
+            << "expected=" << expectedSequence;
         emit collectionCommandFailed(
             QStringLiteral("ACS 控制器未连接，不能读取采集块。"));
         return;
     }
     if (blockIndex < 1 || blockIndex > kAcquisitionBlockCount
         || expectedSequence <= 0) {
+        qCCritical(logAcquisition)
+            << "[采集流程][ACS 块读取] 参数无效，block=" << blockIndex
+            << "expected=" << expectedSequence
+            << "blockCount=" << kAcquisitionBlockCount;
         emit collectionCommandFailed(
             QStringLiteral("采集块读取参数无效：block=%1，sequence=%2。")
                 .arg(blockIndex)
@@ -283,6 +349,9 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
 
     const int metadataIndex = blockIndex - 1;
     // 先读取块所属序号和有效点数，确认控制器此刻没有写该块。
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 块读取] 开始读取前快照，block=" << blockIndex
+        << "metadataIndex=" << metadataIndex;
     int activeBlockBefore = 0;
     int sequenceBefore = 0;
     int validCountBefore = 0;
@@ -309,13 +378,39 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             &partialBefore,
             &errorMessage);
     if (!metadataRead) {
+        qCCritical(logAcquisition).noquote()
+            << "[采集流程][ACS 块读取] 读取前快照失败，block="
+            << blockIndex
+            << "expected=" << expectedSequence
+            << "elapsedMs=" << readTimer.elapsed()
+            << "message=" << errorMessage;
         emit collectionCommandFailed(errorMessage);
         return;
     }
 
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 块读取] 读取前快照完成，block=" << blockIndex
+        << "expected=" << expectedSequence
+        << "activeBefore=" << activeBlockBefore
+        << "sequenceBefore=" << sequenceBefore
+        << "validCountBefore=" << validCountBefore
+        << "partialBefore=" << partialBefore
+        << "elapsedMs=" << readTimer.elapsed();
     if (activeBlockBefore == blockIndex || sequenceBefore != expectedSequence
         || validCountBefore <= 0
         || validCountBefore > kAcquisitionBlockCapacity) {
+        qCWarning(logAcquisition)
+            << "[采集流程][ACS 块读取] 读取前校验拒收，block="
+            << blockIndex
+            << "expected=" << expectedSequence
+            << "activeConflict=" << (activeBlockBefore == blockIndex)
+            << "sequenceMismatch=" << (sequenceBefore != expectedSequence)
+            << "countInvalid="
+            << (validCountBefore <= 0
+                || validCountBefore > kAcquisitionBlockCapacity)
+            << "activeBefore=" << activeBlockBefore
+            << "sequenceBefore=" << sequenceBefore
+            << "validCountBefore=" << validCountBefore;
         emit collectionBlockRejected(
             blockIndex,
             expectedSequence,
@@ -329,6 +424,13 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
     // ACS 一次返回 6 个通道的连续矩阵，避免分通道通信导致时间窗不一致。
     QVector<double> matrixValues(
         kAcquisitionChannelCount * validCountBefore);
+    qCInfo(logAcquisition)
+        << "[采集流程][ACS 块读取] 开始矩阵传输，block=" << blockIndex
+        << "sequence=" << sequenceBefore
+        << "variable=" << kCollectionBlockVariables.at(metadataIndex)
+        << "channels=" << kAcquisitionChannelCount
+        << "samplesPerChannel=" << validCountBefore
+        << "totalValues=" << matrixValues.size();
     if (!readRealMatrix(
             kCollectionBlockVariables.at(metadataIndex),
             0,
@@ -337,11 +439,25 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             validCountBefore - 1,
             matrixValues.data(),
             &errorMessage)) {
+        qCCritical(logAcquisition).noquote()
+            << "[采集流程][ACS 块读取] 矩阵传输失败，block="
+            << blockIndex
+            << "sequence=" << sequenceBefore
+            << "elapsedMs=" << readTimer.elapsed()
+            << "message=" << errorMessage;
         emit collectionCommandFailed(errorMessage);
         return;
     }
+    qCInfo(logAcquisition)
+        << "[采集流程][ACS 块读取] 矩阵传输完成，block=" << blockIndex
+        << "sequence=" << sequenceBefore
+        << "totalValues=" << matrixValues.size()
+        << "elapsedMs=" << readTimer.elapsed();
 
     // 数据传输完成后重读元数据，确认读取期间该环形块没有被控制器复用。
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 块读取] 开始读取后快照，block=" << blockIndex
+        << "sequenceBefore=" << sequenceBefore;
     int activeBlockAfter = 0;
     int sequenceAfter = 0;
     int validCountAfter = 0;
@@ -360,11 +476,36 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             &validCountAfter,
             &errorMessage);
     if (!validationRead) {
+        qCCritical(logAcquisition).noquote()
+            << "[采集流程][ACS 块读取] 读取后快照失败，block="
+            << blockIndex
+            << "expected=" << expectedSequence
+            << "elapsedMs=" << readTimer.elapsed()
+            << "message=" << errorMessage;
         emit collectionCommandFailed(errorMessage);
         return;
     }
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 块读取] 读取后快照完成，block=" << blockIndex
+        << "expected=" << expectedSequence
+        << "activeAfter=" << activeBlockAfter
+        << "sequenceAfter=" << sequenceAfter
+        << "validCountAfter=" << validCountAfter
+        << "elapsedMs=" << readTimer.elapsed();
     if (activeBlockAfter == blockIndex || sequenceAfter != sequenceBefore
         || validCountAfter != validCountBefore) {
+        qCWarning(logAcquisition)
+            << "[采集流程][ACS 块读取] 读取后校验拒收，block="
+            << blockIndex
+            << "expected=" << expectedSequence
+            << "activeConflict=" << (activeBlockAfter == blockIndex)
+            << "sequenceChanged=" << (sequenceAfter != sequenceBefore)
+            << "countChanged=" << (validCountAfter != validCountBefore)
+            << "activeAfter=" << activeBlockAfter
+            << "sequenceBefore=" << sequenceBefore
+            << "sequenceAfter=" << sequenceAfter
+            << "validCountBefore=" << validCountBefore
+            << "validCountAfter=" << validCountAfter;
         emit collectionBlockRejected(
             blockIndex,
             expectedSequence,
@@ -388,6 +529,11 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
     block.positionMeters.resize(validCountBefore);
 
     // ACS 矩阵按通道连续存放：[channel][sample]。
+    qCDebug(logAcquisition)
+        << "[采集流程][ACS 块读取] 开始矩阵通道拆分和单位换算，block="
+        << blockIndex
+        << "sequence=" << sequenceBefore
+        << "sampleCount=" << validCountBefore;
     const double countsToMeters = 1.0 / (countsPerMillimeter_ * kMetersToMillimeters);
     for (int sample = 0; sample < validCountBefore; ++sample) {
         block.accelerationMetersPerSecondSquared[sample] =
@@ -404,6 +550,13 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             matrixValues.at(validCountBefore * 5 + sample) * countsToMeters;
     }
 
+    qCInfo(logAcquisition)
+        << "[采集流程][ACS 块读取] 校验与转换完成，发送数据块回调，block="
+        << block.blockIndex
+        << "sequence=" << block.sequence
+        << "sampleCount=" << block.sampleCount
+        << "partial=" << block.partial
+        << "elapsedMs=" << readTimer.elapsed();
     emit collectionBlockRead(block);
 }
 
