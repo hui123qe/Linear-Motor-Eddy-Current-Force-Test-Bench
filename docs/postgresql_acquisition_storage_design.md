@@ -144,8 +144,7 @@ relative_time_ms = repetitionSampleIndex * samplePeriodMilliseconds
 
 1. 创建第 1 次实验数据表。
 2. 写 `DCSTART_CON = 1`。
-3. 等待采集 Buffer 返回 `DCSTART = 1`，确认已经等待轴运动。
-4. 写入运动参数和 `G_START_REQ = 1`。
+3. 写入运动参数和 `G_START_REQ = 1`。
 
 ### 9.2 每次返回零点
 
@@ -162,21 +161,16 @@ relative_time_ms = repetitionSampleIndex * samplePeriodMilliseconds
 
 1. 创建下一次实验数据表。
 2. 写 `DCSTART_CON = 1`。
-3. 等待采集 Buffer 置 `DCSTART = 1`。
-4. 运动 Buffer 从状态 60 的循环边界继续，进入下一次状态 40。
+3. 运动 Buffer 从状态 60 的循环边界继续，进入下一次状态 40。
 
 ## 10. ACSPL 循环边界
 
-回零完成并更新 `G_CURRENT_COUNT` 后，如果还有下一次重复，运动 Buffer 等待已有采集变量：
+回零完成并更新 `G_CURRENT_COUNT` 后，如果还有下一次重复，运动 Buffer 等待 `DCSTART_CON` 重新置位：
 
 ```acspl
 IF L_LOOP_INDEX < L_REPEAT_COUNT
 
     WHILE ^DCSTART_CON & ^G_ABORT_LATCH
-        WAIT 1
-    END
-
-    WHILE ^DCSTART & ^G_ABORT_LATCH
         WAIT 1
     END
 

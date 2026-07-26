@@ -1,5 +1,5 @@
 #/ Controller version = 4.20
-#/ Date = 7/22/2026 10:25 AM
+#/ Date = 7/26/2026 6:57 PM
 #/ User remarks = 
 #0
 !PNAME=
@@ -337,18 +337,15 @@ G_CURRENT_COUNT = L_LOOP_INDEX
 !   2. 将本次数据异步提交到数据库；
 !   3. 创建下一次实验表；
 !   4. 重新置位 DCSTART_CON；
-!   5. 等待常驻采集 Buffer 置位 DCSTART，确认已经就绪。
 !
-! 这里只复用已有采集变量，不增加新的握手变量。
+! 采集 Buffer 观察 DCSTART_CON 后开始等待轴运动，不使用额外握手变量。
 IF L_LOOP_INDEX < L_REPEAT_COUNT
 
     WHILE ^DCSTART_CON & ^G_ABORT_LATCH
         WAIT 1
     END
 
-    WHILE ^DCSTART & ^G_ABORT_LATCH
-        WAIT 1
-    END
+
 
     IF G_ABORT_LATCH <> 0
         GOTO HANDLE_ABORT
@@ -473,7 +470,7 @@ GOTO WAIT_START
 
 DCCOUNT = 0
 DCSTART_CON = 0
-DCSTART = 0
+
 
 DC_ACTIVE_BLOCK = 0
 DC_FINISHED_BLOCK = 0
@@ -491,7 +488,6 @@ WHILE 1
 
     ! Reset collection session state
     DCCOUNT = 0
-    DCSTART = 1
     DC_ACTIVE_BLOCK = 0
 
 
@@ -502,10 +498,9 @@ WHILE 1
         WAIT 1
     END
 
-    DCSTART = 0
 
 
-    !--------------------------------------------------------
+   !--------------------------------------------------------
     ! Continuous block data collection
     !--------------------------------------------------------
 
@@ -610,7 +605,7 @@ WHILE 1
     !--------------------------------------------------------
 
     DC_ACTIVE_BLOCK = 0
-    DCSTART = 0
+
 
 
 END
@@ -809,9 +804,6 @@ GLOBAL INT DCCOUNT
 
 ! Master data collection control flag
 GLOBAL INT DCSTART_CON
-
-! First-start motion waiting flag
-GLOBAL INT DCSTART
 
 ! Number of the block currently being written
 GLOBAL INT DC_ACTIVE_BLOCK

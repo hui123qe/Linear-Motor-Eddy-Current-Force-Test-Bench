@@ -48,11 +48,10 @@ QString integerArrayText(
 QString metadataText(const AcsCollectionMetadata& metadata)
 {
     return QStringLiteral(
-               "control=%1 armed=%2 active=%3 finished=%4 published=%5 "
-               "finishedCount=%6 finishedPartial=%7 validCounts=%8 "
-               "partialFlags=%9 blockSequences=%10")
+               "control=%1 active=%2 finished=%3 published=%4 "
+               "finishedCount=%5 finishedPartial=%6 validCounts=%7 "
+               "partialFlags=%8 blockSequences=%9")
         .arg(metadata.controlEnabled)
-        .arg(metadata.armed)
         .arg(metadata.activeBlock)
         .arg(metadata.finishedBlock)
         .arg(metadata.publishedSequence)
@@ -350,18 +349,8 @@ void DataAcquisitionService::onMetadataRead(
 
     if (state_ == AcquisitionState::Starting) {
         if (metadata.controlEnabled == 1) {
-            if (metadata.armed != 1) {
-                qCDebug(logAcquisition)
-                    << "[采集流程][启动判定] DCSTART_CON 已开启但 DCSTART 尚未就绪，"
-                       "等待下一次轮询，armed="
-                    << metadata.armed
-                    << "retryMs=" << kMetadataPollIntervalMilliseconds;
-                pollTimer_->start();
-                return;
-            }
-
             qCInfo(logAcquisition)
-                << "[采集流程][启动判定] 控制器已进入采集准备状态，"
+                << "[采集流程][启动判定] DCSTART_CON 已开启，"
                    "即将发布 collectionStarted，baseline="
                 << lastConsumedSequence_;
             setState(AcquisitionState::Collecting);
@@ -370,16 +359,14 @@ void DataAcquisitionService::onMetadataRead(
             return;
         }
 
-        if (metadata.controlEnabled != 0 || metadata.activeBlock != 0
-            || metadata.armed != 0) {
+        if (metadata.controlEnabled != 0 || metadata.activeBlock != 0) {
             qCWarning(logAcquisition).noquote()
                 << "[采集流程][启动判定] Buffer 非空闲，无法建立会话基线，"
                 << metadataText(metadata);
             failCollection(
                 QStringLiteral("采集 Buffer 未处于空闲状态：DCSTART_CON=%1，"
-                               "DCSTART=%2，DC_ACTIVE_BLOCK=%3。")
+                               "DC_ACTIVE_BLOCK=%2。")
                     .arg(metadata.controlEnabled)
-                    .arg(metadata.armed)
                     .arg(metadata.activeBlock));
             return;
         }

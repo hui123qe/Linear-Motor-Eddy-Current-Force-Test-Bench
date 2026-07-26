@@ -65,11 +65,10 @@ QString integerArrayText(
 QString metadataText(const AcsCollectionMetadata& metadata)
 {
     return QStringLiteral(
-               "control=%1 armed=%2 active=%3 finished=%4 published=%5 "
-               "finishedCount=%6 finishedPartial=%7 validCounts=%8 "
-               "partialFlags=%9 blockSequences=%10")
+               "control=%1 active=%2 finished=%3 published=%4 "
+               "finishedCount=%5 finishedPartial=%6 validCounts=%7 "
+               "partialFlags=%8 blockSequences=%9")
         .arg(metadata.controlEnabled)
-        .arg(metadata.armed)
         .arg(metadata.activeBlock)
         .arg(metadata.finishedBlock)
         .arg(metadata.publishedSequence)
@@ -262,7 +261,7 @@ void AcsClient::readCollectionMetadata()
     QElapsedTimer readTimer;
     readTimer.start();
     qCDebug(logAcquisition)
-        << "[采集流程][ACS 元数据读取] 开始：依次读取 7 个标量和 3 个块数组";
+        << "[采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组";
     if (controllerHandle_ == ACSC_INVALID) {
         qCCritical(logAcquisition)
             << "[采集流程][ACS 元数据读取] 失败：控制器未连接";
@@ -276,7 +275,6 @@ void AcsClient::readCollectionMetadata()
     QString errorMessage;
     const bool readSucceeded =
         readInteger("DCSTART_CON", &metadata.controlEnabled, &errorMessage)
-        && readInteger("DCSTART", &metadata.armed, &errorMessage)
         && readInteger("DC_ACTIVE_BLOCK", &metadata.activeBlock, &errorMessage)
         && readInteger("DC_FINISHED_BLOCK", &metadata.finishedBlock, &errorMessage)
         && readInteger(

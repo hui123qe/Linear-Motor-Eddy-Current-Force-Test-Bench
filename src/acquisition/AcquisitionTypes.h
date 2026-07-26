@@ -22,7 +22,6 @@ enum class AcquisitionState
 struct AcsCollectionMetadata
 {
     int controlEnabled = 0;
-    int armed = 0;
     int activeBlock = 0;
     int finishedBlock = 0;
     int publishedSequence = 0;
