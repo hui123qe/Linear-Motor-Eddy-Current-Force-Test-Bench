@@ -35,9 +35,9 @@ QString testTypeText(EddyCurrentTestType testType)
 {
     switch (testType) {
     case EddyCurrentTestType::RatedSpeed:
-        return QStringLiteral("额定速度涡流力测试");
+        return QStringLiteral("标准件涡流力测试");
     case EddyCurrentTestType::VariableSpeed:
-        return QStringLiteral("不同速度涡流力测试");
+        return QStringLiteral("非标准件涡流力测试");
     }
 
     return QStringLiteral("----");
@@ -96,20 +96,6 @@ QString rateText(double value)
     return QStringLiteral("%1 %").arg(value, 0, 'f', 2);
 }
 
-QString signedForceText(double value)
-{
-    return QStringLiteral("%1%2 N")
-        .arg(value >= 0.0 ? QStringLiteral("+") : QString(),
-             QString::number(value, 'f', 2));
-}
-
-QString signedRateDeviationText(double value)
-{
-    return QStringLiteral("%1%2 个百分点")
-        .arg(value >= 0.0 ? QStringLiteral("+") : QString(),
-             QString::number(value, 'f', 2));
-}
-
 bool isActiveMotionState(int state)
 {
     return state == 10 || state == 20 || state == 30
@@ -163,6 +149,17 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
     pageLayout->setContentsMargins(18, 14, 18, 14);
     pageLayout->setSpacing(12);
 
+    initializePageHeader(pageLayout);
+    initializeTaskBar(pageLayout);
+    initializePrimaryArea(pageLayout);
+    initializeLowerArea(pageLayout);
+    initializeConnections();
+
+    updateControlAvailability();
+}
+
+void WorkbenchPage::initializePageHeader(QVBoxLayout* pageLayout)
+{
     auto* heading = new QHBoxLayout;
     auto* headingText = new QVBoxLayout;
     headingText->setSpacing(1);
@@ -176,7 +173,10 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
         QStringLiteral("参数未锁定"), QStringLiteral("neutral"), this);
     heading->addWidget(configurationStatus_);
     pageLayout->addLayout(heading);
+}
 
+void WorkbenchPage::initializeTaskBar(QVBoxLayout* pageLayout)
+{
     auto* taskBar = new QFrame;
     taskBar->setObjectName(QStringLiteral("taskBar"));
     auto* taskLayout = new QHBoxLayout(taskBar);
@@ -189,7 +189,10 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
     taskLayout->addWidget(testItemCard_);
     taskLayout->addWidget(batchCard_);
     pageLayout->addWidget(taskBar);
+}
 
+void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
+{
     auto* primaryRow = new QHBoxLayout;
     primaryRow->setSpacing(12);
 
@@ -219,16 +222,19 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
         QStringLiteral("启动测试"), QStringLiteral("primary"));
     stopButton_ = ViewHelpers::makeButton(
         QStringLiteral("停止"), QStringLiteral("warning"));
-    auto* homing = ViewHelpers::makeButton(QStringLiteral("执行回零"));
+    homingButton_ = ViewHelpers::makeButton(QStringLiteral("执行回零"));
     controlLayout->addWidget(startButton_);
     controlLayout->addWidget(stopButton_);
-    controlLayout->addWidget(homing);
+    controlLayout->addWidget(homingButton_);
     controlLayout->addWidget(ViewHelpers::makeDivider());
     controlLayout->addStretch();
 
     primaryRow->addWidget(controlPanel, 1);
     pageLayout->addLayout(primaryRow, 4);
+}
 
+void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
+{
     auto* lowerRow = new QHBoxLayout;
     lowerRow->setSpacing(12);
 
@@ -254,27 +260,64 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
     motionLayout->addStretch();
     lowerRow->addWidget(motionPanel, 1);
 
-    auto* resultPanel = ViewHelpers::makePanel(QStringLiteral("关键结果"), QStringLiteral("测试完成后自动更新"));
+    auto* resultPanel = ViewHelpers::makePanel(
+        QStringLiteral("关键结果"),
+        QStringLiteral("单次循环完成后更新左栏，全部循环完成后更新右栏"));
     auto* resultLayout = qobject_cast<QVBoxLayout*>(resultPanel->layout());
-    auto* resultGrid = new QGridLayout;
-    resultGrid->setHorizontalSpacing(12);
-    resultGrid->setVerticalSpacing(10);
-    averageForceCard_ = new MetricCard(QStringLiteral("实际平均值 avg"), QStringLiteral("----"));
-    forceRangeCard_ = new MetricCard(QStringLiteral("实际波动值 max-min"), QStringLiteral("----"));
-    fluctuationRateCard_ = new MetricCard(QStringLiteral("实际波动率 (max-min)/avg"), QStringLiteral("----"));
-    averageDeviationCard_ = new MetricCard(QStringLiteral("平均值偏差"), QStringLiteral("----"));
-    fluctuationRateDeviationCard_ = new MetricCard(QStringLiteral("波动率偏差"), QStringLiteral("----"));
-    resultGrid->addWidget(averageForceCard_, 0, 0);
-    resultGrid->addWidget(forceRangeCard_, 0, 1);
-    resultGrid->addWidget(fluctuationRateCard_, 0, 2);
-    resultGrid->addWidget(averageDeviationCard_, 1, 0);
-    resultGrid->addWidget(fluctuationRateDeviationCard_, 1, 1, 1, 2);
-    resultLayout->addLayout(resultGrid);
+    auto* resultColumns = new QHBoxLayout;
+    resultColumns->setSpacing(12);
+
+    auto* cycleResultPanel = ViewHelpers::makePanel(
+        QStringLiteral("每次循环结果"),
+        QStringLiteral("当前已完成循环的关键指标"));
+    auto* cycleResultLayout =
+        qobject_cast<QVBoxLayout*>(cycleResultPanel->layout());
+    auto* cycleResultGrid = new QGridLayout;
+    cycleResultGrid->setHorizontalSpacing(10);
+    cycleResultGrid->setVerticalSpacing(10);
+    averageForceCard_ = new MetricCard(
+        QStringLiteral("平均涡流力"), QStringLiteral("----"));
+    eddyForceCoefficientCard_ = new MetricCard(
+        QStringLiteral("涡流力系数"), QStringLiteral("----"));
+    forceRangeCard_ = new MetricCard(
+        QStringLiteral("涡流力波动值"), QStringLiteral("----"));
+    fluctuationRateCard_ = new MetricCard(
+        QStringLiteral("涡流力波动率"), QStringLiteral("----"));
+    cycleResultGrid->addWidget(averageForceCard_, 0, 0);
+    cycleResultGrid->addWidget(eddyForceCoefficientCard_, 0, 1);
+    cycleResultGrid->addWidget(forceRangeCard_, 1, 0);
+    cycleResultGrid->addWidget(fluctuationRateCard_, 1, 1);
+    cycleResultLayout->addLayout(cycleResultGrid);
+    cycleResultLayout->addStretch();
+    resultColumns->addWidget(cycleResultPanel, 1);
+
+    auto* finalResultPanel = ViewHelpers::makePanel(
+        QStringLiteral("最终实验结果"),
+        QStringLiteral("全部循环完成后的多次平均值"));
+    auto* finalResultLayout =
+        qobject_cast<QVBoxLayout*>(finalResultPanel->layout());
+    auto* finalResultGrid = new QGridLayout;
+    finalResultGrid->setHorizontalSpacing(10);
+    finalResultGrid->setVerticalSpacing(10);
+    multipleAverageForceCard_ = new MetricCard(
+        QStringLiteral("多次平均涡流力"), QStringLiteral("----"));
+    multipleAverageForceCoefficientCard_ = new MetricCard(
+        QStringLiteral("多次平均涡流力系数"), QStringLiteral("----"));
+    finalResultGrid->addWidget(multipleAverageForceCard_, 0, 0);
+    finalResultGrid->addWidget(multipleAverageForceCoefficientCard_, 1, 0);
+    finalResultLayout->addLayout(finalResultGrid);
+    finalResultLayout->addStretch();
+    resultColumns->addWidget(finalResultPanel, 1);
+
+    resultLayout->addLayout(resultColumns);
     resultLayout->addStretch();
     lowerRow->addWidget(resultPanel, 3);
 
     pageLayout->addLayout(lowerRow, 1);
+}
 
+void WorkbenchPage::initializeConnections()
+{
     connect(startButton_,
             &QPushButton::clicked,
             this,
@@ -283,7 +326,7 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
             &QPushButton::clicked,
             this,
             &WorkbenchPage::onStopButtonClicked);
-    connect(homing,
+    connect(homingButton_,
             &QPushButton::clicked,
             this,
             &WorkbenchPage::onHomingButtonClicked);
@@ -387,8 +430,6 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
             &TestResultService::resultUpdated,
             this,
             &WorkbenchPage::setResultComparison);
-
-    updateControlAvailability();
 }
 
 bool WorkbenchPage::isConfigurationLocked() const
@@ -558,10 +599,11 @@ void WorkbenchPage::clearChartData()
 void WorkbenchPage::clearResults()
 {
     averageForceCard_->setValue(QStringLiteral("----"));
+    eddyForceCoefficientCard_->setValue(QStringLiteral("----"));
     forceRangeCard_->setValue(QStringLiteral("----"));
     fluctuationRateCard_->setValue(QStringLiteral("----"));
-    averageDeviationCard_->setValue(QStringLiteral("----"));
-    fluctuationRateDeviationCard_->setValue(QStringLiteral("----"));
+    multipleAverageForceCard_->setValue(QStringLiteral("----"));
+    multipleAverageForceCoefficientCard_->setValue(QStringLiteral("----"));
 }
 
 void WorkbenchPage::setResultComparison(const TestResultComparison& comparison)
@@ -569,9 +611,4 @@ void WorkbenchPage::setResultComparison(const TestResultComparison& comparison)
     averageForceCard_->setValue(forceText(comparison.actual.averageForceNewtons));
     forceRangeCard_->setValue(forceText(comparison.actual.forceRangeNewtons));
     fluctuationRateCard_->setValue(rateText(comparison.actualFluctuationRatePercent));
-    averageDeviationCard_->setValue(
-        signedForceText(comparison.averageDeviationNewtons));
-    fluctuationRateDeviationCard_->setValue(
-        signedRateDeviationText(
-            comparison.fluctuationRateDeviationPercentagePoints));
 }

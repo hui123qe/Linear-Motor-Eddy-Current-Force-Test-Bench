@@ -14,6 +14,7 @@ class ChartWidget;
 class MetricCard;
 class QPushButton;
 class StatusPill;
+class QVBoxLayout;
 
 class WorkbenchPage final : public QWidget
 {
@@ -42,6 +43,11 @@ private slots:
     void onHomingButtonClicked();
 
 private:
+    void initializePageHeader(QVBoxLayout* pageLayout);
+    void initializeTaskBar(QVBoxLayout* pageLayout);
+    void initializePrimaryArea(QVBoxLayout* pageLayout);
+    void initializeLowerArea(QVBoxLayout* pageLayout);
+    void initializeConnections();
     void beginTest(const TestResultTargets& targets);
     void stopTest();
     void updateControlAvailability();
@@ -52,15 +58,17 @@ private:
     MetricCard* testItemCard_ = nullptr;
     MetricCard* batchCard_ = nullptr;
     MetricCard* averageForceCard_ = nullptr;
+    MetricCard* eddyForceCoefficientCard_ = nullptr;
     MetricCard* forceRangeCard_ = nullptr;
     MetricCard* fluctuationRateCard_ = nullptr;
-    MetricCard* averageDeviationCard_ = nullptr;
-    MetricCard* fluctuationRateDeviationCard_ = nullptr;
+    MetricCard* multipleAverageForceCard_ = nullptr;
+    MetricCard* multipleAverageForceCoefficientCard_ = nullptr;
     ChartWidget* chartWidget_ = nullptr;
     StatusPill* configurationStatus_ = nullptr;
     QLabel* currentStateValue_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
+    QPushButton* homingButton_ = nullptr;
     bool configurationLocked_ = false;
     bool controllerConnected_ = false;
     bool acquisitionReady_ = false;
