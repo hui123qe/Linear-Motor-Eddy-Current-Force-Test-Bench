@@ -129,7 +129,7 @@ bool initialize(QString* errorMessage)
         QStringLiteral("高速涡流测试台-%1.log")
             .arg(QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"))));
     state.file.setFileName(state.filePath);
-    if (!state.file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+    if (!state.file.open(QIODevice::WriteOnly| QIODevice::Text)) {
         setError(
             errorMessage,
             QStringLiteral("无法打开日志文件：%1\n%2")
