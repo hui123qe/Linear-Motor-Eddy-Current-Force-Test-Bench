@@ -12,6 +12,7 @@ class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
+class QVBoxLayout;
 class StatusPill;
 struct TestParameters;
 
@@ -37,6 +38,15 @@ private slots:
 
 private:
     [[nodiscard]] TestParameters currentParameters() const;
+    void initializePageHeader(QVBoxLayout* pageLayout);
+    void initializeBatchArea(QVBoxLayout* pageLayout);
+    void initializeRepeatArea(QVBoxLayout* pageLayout);
+    void initializeTestTypeArea(QVBoxLayout* pageLayout);
+    void initializeTestPages(QVBoxLayout* pageLayout);
+    [[nodiscard]] QWidget* createStandardSpecimenPage();
+    [[nodiscard]] QWidget* createNonStandardSpecimenPage();
+    void initializeFooter(QVBoxLayout* pageLayout);
+    void initializeConnections();
     void loadConfigurationAtStartup();
     void publishDisplayConfiguration();
     void saveParameters();
@@ -63,6 +73,8 @@ private:
     QDoubleSpinBox* ratedAccelerationDistanceInput_ = nullptr;
     QDoubleSpinBox* ratedEndPositionInput_ = nullptr;
     QDoubleSpinBox* ratedSpeedInput_ = nullptr;
+    QDoubleSpinBox* ratedAcquisitionStartInput_ = nullptr;
+    QDoubleSpinBox* ratedAcquisitionEndInput_ = nullptr;
     QLabel* ratedAccelerationValue_ = nullptr;
     StatusPill* ratedStatus_ = nullptr;
     QFrame* ratedCheck_ = nullptr;
@@ -71,6 +83,8 @@ private:
     QDoubleSpinBox* variableAccelerationDistanceInput_ = nullptr;
     QDoubleSpinBox* variableEndPositionInput_ = nullptr;
     QDoubleSpinBox* variableSpeedInput_ = nullptr;
+    QDoubleSpinBox* variableAcquisitionStartInput_ = nullptr;
+    QDoubleSpinBox* variableAcquisitionEndInput_ = nullptr;
     QLabel* variableAccelerationValue_ = nullptr;
     StatusPill* variableStatus_ = nullptr;
     QFrame* variableCheck_ = nullptr;

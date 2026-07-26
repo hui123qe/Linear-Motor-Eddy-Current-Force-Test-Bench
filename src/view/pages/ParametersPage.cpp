@@ -80,16 +80,30 @@ void setConstraintState(QFrame* frame, const QString& level)
 ParametersPage::ParametersPage(QWidget* parent)
     : QWidget(parent)
 {
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(18, 14, 18, 14);
-    layout->setSpacing(12);
+    auto* pageLayout = new QVBoxLayout(this);
+    pageLayout->setContentsMargins(18, 14, 18, 14);
+    pageLayout->setSpacing(12);
 
+    initializePageHeader(pageLayout);
+    initializeBatchArea(pageLayout);
+    initializeRepeatArea(pageLayout);
+    initializeTestTypeArea(pageLayout);
+    initializeTestPages(pageLayout);
+    initializeFooter(pageLayout);
+    initializeConnections();
+
+    setConfigurationLocked(false);
+    QTimer::singleShot(0, this, &ParametersPage::loadConfigurationAtStartup);
+}
+
+void ParametersPage::initializePageHeader(QVBoxLayout* pageLayout)
+{
     auto* heading = new QHBoxLayout;
     auto* titleBox = new QVBoxLayout;
     titleBox->setSpacing(1);
     titleBox->addWidget(ViewHelpers::makeLabel(QStringLiteral("参数设置"), "pageTitle"));
     titleBox->addWidget(ViewHelpers::makeLabel(
-        QStringLiteral("按测试项填写必要参数，速度和加速度约束在界面侧即时校验"),
+        QStringLiteral("按试验件类型填写运动与采集参数，运动约束在界面侧即时校验"),
         "pageDescription"));
     heading->addLayout(titleBox);
     heading->addStretch();
@@ -99,12 +113,11 @@ ParametersPage::ParametersPage(QWidget* parent)
     heading->addWidget(saveButton_);
     heading->addWidget(resetButton_);
     heading->addWidget(confirmButton_);
-    layout->addLayout(heading);
+    pageLayout->addLayout(heading);
+}
 
-    connect(saveButton_, &QPushButton::clicked, this, &ParametersPage::saveParameters);
-    connect(resetButton_, &QPushButton::clicked, this, &ParametersPage::resetParameters);
-    connect(confirmButton_, &QPushButton::clicked, this, &ParametersPage::confirmParameters);
-
+void ParametersPage::initializeBatchArea(QVBoxLayout* pageLayout)
+{
     auto* batchPanel = new QFrame;
     batchPanel->setObjectName(QStringLiteral("globalConfigPanel"));
     auto* batchLayout = new QGridLayout(batchPanel);
@@ -126,8 +139,11 @@ ParametersPage::ParametersPage(QWidget* parent)
 
     batchLayout->setColumnStretch(1, 2);
     batchLayout->setColumnStretch(3, 2);
-    layout->addWidget(batchPanel);
+    pageLayout->addWidget(batchPanel);
+}
 
+void ParametersPage::initializeRepeatArea(QVBoxLayout* pageLayout)
+{
     auto* repeatPanel = new QFrame;
     repeatPanel->setObjectName(QStringLiteral("globalConfigPanel"));
     auto* repeatLayout = new QGridLayout(repeatPanel);
@@ -141,8 +157,11 @@ ParametersPage::ParametersPage(QWidget* parent)
     repeatLayout->addWidget(repeatCountInput_, 1, 1);
     repeatLayout->setColumnStretch(1, 1);
     repeatLayout->setColumnStretch(2, 4);
-    layout->addWidget(repeatPanel);
+    pageLayout->addWidget(repeatPanel);
+}
 
+void ParametersPage::initializeTestTypeArea(QVBoxLayout* pageLayout)
+{
     auto* testTypePanel = new QFrame;
     testTypePanel->setObjectName(QStringLiteral("globalConfigPanel"));
     auto* testTypeLayout = new QGridLayout(testTypePanel);
@@ -152,40 +171,73 @@ ParametersPage::ParametersPage(QWidget* parent)
         ViewHelpers::makeLabel(QStringLiteral("测试项目"), "globalConfigTitle"), 0, 0);
 
     testTypeInput_ = new QComboBox;
-    testTypeInput_->addItem(QStringLiteral("额定速度涡流力测试"),
+    testTypeInput_->addItem(QStringLiteral("标准件涡流力测试"),
                             static_cast<int>(EddyCurrentTestType::RatedSpeed));
-    testTypeInput_->addItem(QStringLiteral("不同速度涡流力测试"),
+    testTypeInput_->addItem(QStringLiteral("非标准件涡流力测试"),
                             static_cast<int>(EddyCurrentTestType::VariableSpeed));
     testTypeLayout->addWidget(testTypeInput_, 0, 1);
     testTypeLayout->setColumnStretch(1, 1);
-    layout->addWidget(testTypePanel);
+    pageLayout->addWidget(testTypePanel);
+}
 
+void ParametersPage::initializeTestPages(QVBoxLayout* pageLayout)
+{
     testPages_ = new QStackedWidget;
+    testPages_->addWidget(createStandardSpecimenPage());
+    testPages_->addWidget(createNonStandardSpecimenPage());
+    pageLayout->addWidget(testPages_, 1);
+}
 
+QWidget* ParametersPage::createStandardSpecimenPage()
+{
     auto* ratedTab = new QWidget;
     auto* ratedLayout = new QHBoxLayout(ratedTab);
     ratedLayout->setContentsMargins(14, 14, 14, 14);
     ratedLayout->setSpacing(12);
 
     auto* ratedFormPanel = ViewHelpers::makePanel(
-        QStringLiteral("额定速度涡流力测试"),
-        QStringLiteral("根据加速距离计算对称的 PTP 加减速度"));
+        QStringLiteral("标准件涡流力测试"),
+        QStringLiteral("标准运动范围固定，可设置速度与采集位置"));
     auto* ratedFormLayout = qobject_cast<QVBoxLayout*>(ratedFormPanel->layout());
     auto* ratedForm = new QFormLayout;
     ratedForm->setHorizontalSpacing(28);
     ratedForm->setVerticalSpacing(14);
     ratedAccelerationStartInput_ =
-        makeDoubleInput(0.0, -1000.0, 1000.0, QStringLiteral("m"));
+        makeDoubleInput(kStandardAccelerationStartMeters,
+                        -1000.0,
+                        1000.0,
+                        QStringLiteral("m"));
     ratedAccelerationDistanceInput_ =
-        makeDoubleInput(0.5, 0.001, 1000.0, QStringLiteral("m"));
+        makeDoubleInput(kStandardAccelerationDistanceMeters,
+                        0.001,
+                        1000.0,
+                        QStringLiteral("m"));
     ratedEndPositionInput_ =
-        makeDoubleInput(1.7, -1000.0, 1000.0, QStringLiteral("m"));
+        makeDoubleInput(kStandardEndPositionMeters,
+                        -1000.0,
+                        1000.0,
+                        QStringLiteral("m"));
     ratedSpeedInput_ = makeDoubleInput(
         3.0, 0.01, kMaximumTestSpeedMetersPerSecond, QStringLiteral("m/s"));
-    ratedForm->addRow(QStringLiteral("开始加速位置"), ratedAccelerationStartInput_);
-    ratedForm->addRow(QStringLiteral("加速距离"), ratedAccelerationDistanceInput_);
+    ratedAcquisitionStartInput_ = makeDoubleInput(
+        kDefaultAcquisitionStartMeters,
+        -1000.0,
+        1000.0,
+        QStringLiteral("m"));
+    ratedAcquisitionEndInput_ = makeDoubleInput(
+        kDefaultAcquisitionEndMeters,
+        -1000.0,
+        1000.0,
+        QStringLiteral("m"));
+    ratedAccelerationStartInput_->setEnabled(false);
+    ratedAccelerationDistanceInput_->setEnabled(false);
+    ratedEndPositionInput_->setEnabled(false);
+    ratedForm->addRow(QStringLiteral("开始位置"), ratedAccelerationStartInput_);
+    ratedForm->addRow(QStringLiteral("加减速距离"), ratedAccelerationDistanceInput_);
     ratedForm->addRow(QStringLiteral("结束位置"), ratedEndPositionInput_);
     ratedForm->addRow(QStringLiteral("速度"), ratedSpeedInput_);
+    ratedForm->addRow(QStringLiteral("开始采集位置"), ratedAcquisitionStartInput_);
+    ratedForm->addRow(QStringLiteral("结束采集位置"), ratedAcquisitionEndInput_);
     ratedFormLayout->addLayout(ratedForm);
 
     auto* ratedComputedGrid = new QGridLayout;
@@ -212,8 +264,9 @@ ParametersPage::ParametersPage(QWidget* parent)
         QStringLiteral("读写限制与执行约束"),
         {QStringLiteral("最大速度：5 m/s。"),
          QStringLiteral("最大加速度/减速度：25 m/s2。"),
+         QStringLiteral("标准件开始位置、加减速距离和结束位置固定。"),
          QStringLiteral("对称加减速：加速度 = 减速度 = v^2 / (2 x 加速距离)。"),
-         QStringLiteral("总行程必须不小于两倍加速距离。")},
+         QStringLiteral("采集位置仅保存设置，不参与运动参数约束。")},
         QStringLiteral("ok"));
     ratedFormLayout->addStretch();
     ratedLayout->addWidget(ratedFormPanel, 3);
@@ -230,14 +283,19 @@ ParametersPage::ParametersPage(QWidget* parent)
     }
     updateRatedSpeedState();
 
+    return ratedTab;
+}
+
+QWidget* ParametersPage::createNonStandardSpecimenPage()
+{
     auto* variableTab = new QWidget;
     auto* variableLayout = new QHBoxLayout(variableTab);
     variableLayout->setContentsMargins(14, 14, 14, 14);
     variableLayout->setSpacing(12);
 
     auto* variableFormPanel = ViewHelpers::makePanel(
-        QStringLiteral("不同速度涡流力测试"),
-        QStringLiteral("根据加速距离计算对称的 PTP 加减速度"));
+        QStringLiteral("非标准件涡流力测试"),
+        QStringLiteral("可设置运动范围、速度与采集位置"));
     auto* variableFormLayout = qobject_cast<QVBoxLayout*>(variableFormPanel->layout());
     auto* variableForm = new QFormLayout;
     variableForm->setHorizontalSpacing(28);
@@ -251,10 +309,22 @@ ParametersPage::ParametersPage(QWidget* parent)
         makeDoubleInput(1.7, -1000.0, 1000.0, QStringLiteral("m"));
     variableSpeedInput_ = makeDoubleInput(
         3.0, 0.01, kMaximumTestSpeedMetersPerSecond, QStringLiteral("m/s"));
-    variableForm->addRow(QStringLiteral("开始加速位置"), variableAccelerationStartInput_);
-    variableForm->addRow(QStringLiteral("加速距离"), variableAccelerationDistanceInput_);
+    variableAcquisitionStartInput_ = makeDoubleInput(
+        kDefaultAcquisitionStartMeters,
+        -1000.0,
+        1000.0,
+        QStringLiteral("m"));
+    variableAcquisitionEndInput_ = makeDoubleInput(
+        kDefaultAcquisitionEndMeters,
+        -1000.0,
+        1000.0,
+        QStringLiteral("m"));
+    variableForm->addRow(QStringLiteral("开始位置"), variableAccelerationStartInput_);
+    variableForm->addRow(QStringLiteral("加减速距离"), variableAccelerationDistanceInput_);
     variableForm->addRow(QStringLiteral("结束位置"), variableEndPositionInput_);
     variableForm->addRow(QStringLiteral("速度"), variableSpeedInput_);
+    variableForm->addRow(QStringLiteral("开始采集位置"), variableAcquisitionStartInput_);
+    variableForm->addRow(QStringLiteral("结束采集位置"), variableAcquisitionEndInput_);
     variableFormLayout->addLayout(variableForm);
 
     auto* computedGrid = new QGridLayout;
@@ -283,7 +353,8 @@ ParametersPage::ParametersPage(QWidget* parent)
         {QStringLiteral("最大速度：5 m/s。"),
          QStringLiteral("最大加速度/减速度：25 m/s2。"),
          QStringLiteral("对称加减速：加速度 = 减速度 = v^2 / (2 x 加速距离)。"),
-         QStringLiteral("总行程必须不小于两倍加速距离。")},
+         QStringLiteral("总行程必须不小于两倍加减速距离。"),
+         QStringLiteral("采集位置仅保存设置，不参与运动参数约束。")},
         QStringLiteral("ok"));
     variableLayout->addWidget(variableCheck_, 2);
 
@@ -298,23 +369,29 @@ ParametersPage::ParametersPage(QWidget* parent)
     }
     updateVariableState();
 
-    testPages_->addWidget(ratedTab);
-    testPages_->addWidget(variableTab);
+    return variableTab;
+}
+
+void ParametersPage::initializeFooter(QVBoxLayout* pageLayout)
+{
+    auto* footer = makeConstraintBox(
+        QStringLiteral("全局说明"),
+        {QStringLiteral("本页面只负责参数录入、约束提示和锁定前检查，不直接驱动设备。"),
+         QStringLiteral("采集起止位置当前作为配置保存，不改变 ACS 采集启停时序。"),
+         QStringLiteral("真实执行前仍应由控制模块再次校验速度、位置、加速度和联锁状态。")},
+        QStringLiteral("warning"));
+    pageLayout->addWidget(footer);
+}
+
+void ParametersPage::initializeConnections()
+{
+    connect(saveButton_, &QPushButton::clicked, this, &ParametersPage::saveParameters);
+    connect(resetButton_, &QPushButton::clicked, this, &ParametersPage::resetParameters);
+    connect(confirmButton_, &QPushButton::clicked, this, &ParametersPage::confirmParameters);
     connect(testTypeInput_,
             qOverload<int>(&QComboBox::currentIndexChanged),
             testPages_,
             &QStackedWidget::setCurrentIndex);
-    layout->addWidget(testPages_, 1);
-
-    auto* footer = makeConstraintBox(
-        QStringLiteral("全局说明"),
-        {QStringLiteral("本页面只负责参数录入、约束提示和锁定前检查，不直接驱动设备。"),
-         QStringLiteral("真实执行前仍应由控制模块再次校验速度、位置、加速度和联锁状态。")},
-        QStringLiteral("warning"));
-    layout->addWidget(footer);
-
-    setConfigurationLocked(false);
-    QTimer::singleShot(0, this, &ParametersPage::loadConfigurationAtStartup);
 }
 
 void ParametersPage::updateRatedSpeedState()
@@ -392,6 +469,10 @@ TestParameters ParametersPage::currentParameters() const
         ratedAccelerationDistanceInput_->value();
     parameters.ratedSpeedTest.endPositionMeters = ratedEndPositionInput_->value();
     parameters.ratedSpeedTest.speedMetersPerSecond = ratedSpeedInput_->value();
+    parameters.ratedSpeedTest.acquisitionStartMeters =
+        ratedAcquisitionStartInput_->value();
+    parameters.ratedSpeedTest.acquisitionEndMeters =
+        ratedAcquisitionEndInput_->value();
     parameters.variableSpeedTest.accelerationStartMeters =
         variableAccelerationStartInput_->value();
     parameters.variableSpeedTest.accelerationDistanceMeters =
@@ -400,6 +481,10 @@ TestParameters ParametersPage::currentParameters() const
         variableEndPositionInput_->value();
     parameters.variableSpeedTest.speedMetersPerSecond =
         variableSpeedInput_->value();
+    parameters.variableSpeedTest.acquisitionStartMeters =
+        variableAcquisitionStartInput_->value();
+    parameters.variableSpeedTest.acquisitionEndMeters =
+        variableAcquisitionEndInput_->value();
     return parameters;
 }
 
@@ -413,12 +498,14 @@ void ParametersPage::setConfiguration(const TestParameters& parameters)
     motorModelInput_->setText(parameters.motorModel);
     specimenIdInput_->setText(parameters.specimenId);
     repeatCountInput_->setValue(parameters.repeatCount);
-    ratedAccelerationStartInput_->setValue(
-        parameters.ratedSpeedTest.accelerationStartMeters);
-    ratedAccelerationDistanceInput_->setValue(
-        parameters.ratedSpeedTest.accelerationDistanceMeters);
-    ratedEndPositionInput_->setValue(parameters.ratedSpeedTest.endPositionMeters);
+    ratedAccelerationStartInput_->setValue(kStandardAccelerationStartMeters);
+    ratedAccelerationDistanceInput_->setValue(kStandardAccelerationDistanceMeters);
+    ratedEndPositionInput_->setValue(kStandardEndPositionMeters);
     ratedSpeedInput_->setValue(parameters.ratedSpeedTest.speedMetersPerSecond);
+    ratedAcquisitionStartInput_->setValue(
+        parameters.ratedSpeedTest.acquisitionStartMeters);
+    ratedAcquisitionEndInput_->setValue(
+        parameters.ratedSpeedTest.acquisitionEndMeters);
     variableAccelerationStartInput_->setValue(
         parameters.variableSpeedTest.accelerationStartMeters);
     variableAccelerationDistanceInput_->setValue(
@@ -427,6 +514,10 @@ void ParametersPage::setConfiguration(const TestParameters& parameters)
         parameters.variableSpeedTest.endPositionMeters);
     variableSpeedInput_->setValue(
         parameters.variableSpeedTest.speedMetersPerSecond);
+    variableAcquisitionStartInput_->setValue(
+        parameters.variableSpeedTest.acquisitionStartMeters);
+    variableAcquisitionEndInput_->setValue(
+        parameters.variableSpeedTest.acquisitionEndMeters);
 }
 
 void ParametersPage::saveParameters()

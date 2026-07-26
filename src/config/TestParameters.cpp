@@ -14,7 +14,8 @@
 
 namespace {
 
-constexpr int kSchemaVersion = 3;
+constexpr int kSchemaVersion = 4;
+constexpr int kPreviousSchemaVersion = 3;
 constexpr int kMinimumRepeatCount = 1;
 constexpr int kMaximumRepeatCount = 999;
 
@@ -112,20 +113,37 @@ bool validateValues(const TestParameters& parameters, QString* errorMessage)
         setError(errorMessage, QStringLiteral("重复次数必须在 1 到 999 之间。"));
         return false;
     }
+    if (parameters.ratedSpeedTest.accelerationStartMeters
+            != kStandardAccelerationStartMeters
+        || parameters.ratedSpeedTest.accelerationDistanceMeters
+               != kStandardAccelerationDistanceMeters
+        || parameters.ratedSpeedTest.endPositionMeters
+               != kStandardEndPositionMeters) {
+        setError(errorMessage,
+                 QStringLiteral("标准件测试的开始位置、加减速距离和结束位置必须使用固定值。"));
+        return false;
+    }
+    if (!std::isfinite(parameters.ratedSpeedTest.acquisitionStartMeters)
+        || !std::isfinite(parameters.ratedSpeedTest.acquisitionEndMeters)
+        || !std::isfinite(parameters.variableSpeedTest.acquisitionStartMeters)
+        || !std::isfinite(parameters.variableSpeedTest.acquisitionEndMeters)) {
+        setError(errorMessage, QStringLiteral("采集起止位置必须为有限数值。"));
+        return false;
+    }
     PtpMotionParameters motionParameters;
     QString motionError;
     if (!calculatePtpMotionParameters(
             parameters.ratedSpeedTest, &motionParameters, &motionError)) {
         setError(
             errorMessage,
-            QStringLiteral("额定速度测试：%1").arg(motionError));
+            QStringLiteral("标准件测试：%1").arg(motionError));
         return false;
     }
     if (!calculatePtpMotionParameters(
             parameters.variableSpeedTest, &motionParameters, &motionError)) {
         setError(
             errorMessage,
-            QStringLiteral("不同速度测试：%1").arg(motionError));
+            QStringLiteral("非标准件测试：%1").arg(motionError));
         return false;
     }
 
@@ -179,6 +197,10 @@ QJsonObject toJson(const TestParameters& parameters)
                       motion.endPositionMeters);
         object.insert(QStringLiteral("speedMetersPerSecond"),
                       motion.speedMetersPerSecond);
+        object.insert(QStringLiteral("acquisitionStartMeters"),
+                      motion.acquisitionStartMeters);
+        object.insert(QStringLiteral("acquisitionEndMeters"),
+                      motion.acquisitionEndMeters);
         return object;
     };
 
@@ -203,7 +225,8 @@ bool fromJson(const QJsonObject& root, TestParameters* parameters, QString* erro
                      errorMessage)) {
         return false;
     }
-    if (schemaVersion != kSchemaVersion) {
+    if (schemaVersion != kSchemaVersion
+        && schemaVersion != kPreviousSchemaVersion) {
         setError(errorMessage,
                  QStringLiteral("不支持的配置版本：%1。").arg(schemaVersion));
         return false;
@@ -279,6 +302,31 @@ bool fromJson(const QJsonObject& root, TestParameters* parameters, QString* erro
                        errorMessage)) {
         return false;
     }
+    if (schemaVersion == kSchemaVersion
+        && (!readDouble(ratedSpeedTest,
+                        QStringLiteral("acquisitionStartMeters"),
+                        &parsed.ratedSpeedTest.acquisitionStartMeters,
+                        errorMessage)
+            || !readDouble(ratedSpeedTest,
+                           QStringLiteral("acquisitionEndMeters"),
+                           &parsed.ratedSpeedTest.acquisitionEndMeters,
+                           errorMessage)
+            || !readDouble(variableSpeedTest,
+                           QStringLiteral("acquisitionStartMeters"),
+                           &parsed.variableSpeedTest.acquisitionStartMeters,
+                           errorMessage)
+            || !readDouble(variableSpeedTest,
+                           QStringLiteral("acquisitionEndMeters"),
+                           &parsed.variableSpeedTest.acquisitionEndMeters,
+                           errorMessage))) {
+        return false;
+    }
+
+    parsed.ratedSpeedTest.accelerationStartMeters =
+        kStandardAccelerationStartMeters;
+    parsed.ratedSpeedTest.accelerationDistanceMeters =
+        kStandardAccelerationDistanceMeters;
+    parsed.ratedSpeedTest.endPositionMeters = kStandardEndPositionMeters;
     if (!validateValues(parsed, errorMessage)) {
         return false;
     }
