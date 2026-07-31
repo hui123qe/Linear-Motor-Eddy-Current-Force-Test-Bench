@@ -347,6 +347,14 @@ void DataAcquisitionService::onMetadataRead(
         << "lastConsumed=" << lastConsumedSequence_
         << metadataText(metadata);
 
+    if (metadata.publishedSequence == 0 && lastConsumedSequence_ != 0) {
+        qCInfo(logAcquisition)
+            << "[采集流程][序号重置] 下位发布序号已清零，"
+               "上位消费序号从头计算，oldLastConsumed="
+            << lastConsumedSequence_;
+        lastConsumedSequence_ = 0;
+    }
+
     if (state_ == AcquisitionState::Starting) {
         if (metadata.controlEnabled == 1) {
             qCInfo(logAcquisition)

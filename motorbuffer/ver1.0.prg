@@ -1,5 +1,5 @@
 #/ Controller version = 4.20
-#/ Date = 7/26/2026 6:57 PM
+#/ Date = 7/30/2026 12:16 AM
 #/ User remarks = 
 #0
 !PNAME=
@@ -337,8 +337,9 @@ G_CURRENT_COUNT = L_LOOP_INDEX
 !   2. 将本次数据异步提交到数据库；
 !   3. 创建下一次实验表；
 !   4. 重新置位 DCSTART_CON；
+!   5. 等待常驻采集 Buffer 置位 DCSTART，确认已经就绪。
 !
-! 采集 Buffer 观察 DCSTART_CON 后开始等待轴运动，不使用额外握手变量。
+! 这里只复用已有采集变量，不增加新的握手变量。
 IF L_LOOP_INDEX < L_REPEAT_COUNT
 
     WHILE ^DCSTART_CON & ^G_ABORT_LATCH
@@ -486,9 +487,44 @@ WHILE 1
 
     TILL DCSTART_CON = 1
 
-    ! Reset collection session state
+    !--------------------------------------------------------
+    ! Reset the new collection session
+    !
+    ! The host must finish reading the previous session
+    ! before setting DCSTART_CON to 1 again.
+    !--------------------------------------------------------
+
     DCCOUNT = 0
+
     DC_ACTIVE_BLOCK = 0
+
+    DC_FINISHED_BLOCK = 0
+    DC_FINISHED_COUNT = 0
+    DC_FINISHED_PARTIAL = 0
+
+    DC_BLOCK_SEQUENCE = 0
+    DC_CURRENT_VALID_COUNT = 0
+
+
+    ! Clear block metadata from the previous session
+
+    DC_BLOCK_VALID_COUNT(0) = 0
+    DC_BLOCK_VALID_COUNT(1) = 0
+    DC_BLOCK_VALID_COUNT(2) = 0
+    DC_BLOCK_VALID_COUNT(3) = 0
+    DC_BLOCK_VALID_COUNT(4) = 0
+
+    DC_BLOCK_PARTIAL_MAP(0) = 0
+    DC_BLOCK_PARTIAL_MAP(1) = 0
+    DC_BLOCK_PARTIAL_MAP(2) = 0
+    DC_BLOCK_PARTIAL_MAP(3) = 0
+    DC_BLOCK_PARTIAL_MAP(4) = 0
+
+    DC_BLOCK_SEQ_MAP(0) = 0
+    DC_BLOCK_SEQ_MAP(1) = 0
+    DC_BLOCK_SEQ_MAP(2) = 0
+    DC_BLOCK_SEQ_MAP(3) = 0
+    DC_BLOCK_SEQ_MAP(4) = 0
 
 
     !--------------------------------------------------------
@@ -804,6 +840,9 @@ GLOBAL INT DCCOUNT
 
 ! Master data collection control flag
 GLOBAL INT DCSTART_CON
+
+! First-start motion waiting flag
+GLOBAL INT DCSTART
 
 ! Number of the block currently being written
 GLOBAL INT DC_ACTIVE_BLOCK
