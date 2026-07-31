@@ -667,6 +667,71 @@ BLOCK
 END
 
 RET
+#2
+!PNAME=
+!PDESC=
+!============================================================
+! 正弦模拟变量
+!
+! 公式：
+! SIM_VALUE = OFFSET + AMPLITUDE * SIN(2 * PI * FREQ * TIME)
+!============================================================
+
+GLOBAL REAL SIM_VALUE
+GLOBAL REAL SIM_AMPLITUDE
+GLOBAL REAL SIM_OFFSET
+GLOBAL REAL SIM_FREQ_HZ
+GLOBAL REAL SIM_PHASE_DEG
+GLOBAL INT  SIM_RUN
+
+REAL SIM_START_TIME
+REAL SIM_TIME_SEC
+REAL SIM_ANGLE
+REAL SIM_PI
+
+
+!------------------------------------------------------------
+! 参数初始化
+!------------------------------------------------------------
+
+SIM_PI = 3.141592653589793
+
+SIM_AMPLITUDE = 10.0    ! 振幅
+SIM_OFFSET = 20.0       ! 中心值
+SIM_FREQ_HZ = 0.5       ! 频率，单位 Hz
+SIM_PHASE_DEG = 0.0     ! 初始相位，单位度
+
+SIM_RUN = 1
+
+! 记录程序启动时间
+SIM_START_TIME = TIME
+
+
+!------------------------------------------------------------
+! 持续生成正弦变量
+!------------------------------------------------------------
+
+WHILE SIM_RUN
+
+    ! TIME 的单位是毫秒，转换成秒
+    SIM_TIME_SEC = (TIME - SIM_START_TIME) / 1000.0
+
+    ! SIN 使用弧度
+    SIM_ANGLE = 2.0 * SIM_PI * SIM_FREQ_HZ * SIM_TIME_SEC
+    SIM_ANGLE = SIM_ANGLE + SIM_PHASE_DEG * SIM_PI / 180.0
+
+    CURRFORCE = SIM_OFFSET + SIM_AMPLITUDE * SIN(SIM_ANGLE)
+
+    ! 每 10ms 更新一次
+    WAIT 0.25
+
+END
+
+
+! 正常退出时恢复到中心值
+SIM_VALUE = SIM_OFFSET
+
+STOP
 #A
 !PNAME=
 !PDESC=
