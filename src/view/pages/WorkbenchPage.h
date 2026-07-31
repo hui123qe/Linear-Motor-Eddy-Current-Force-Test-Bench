@@ -15,6 +15,8 @@ class MetricCard;
 class QPushButton;
 class StatusPill;
 class QVBoxLayout;
+struct ExperimentRecord;
+struct ExperimentSummaryRecord;
 
 class WorkbenchPage final : public QWidget
 {
@@ -35,6 +37,8 @@ public slots:
     void appendEddyForceSamples(const QVector<QPointF>& samples);
     void clearChartData();
     void clearResults();
+    void setExperimentRecord(const ExperimentRecord& record);
+    void setExperimentSummary(const ExperimentSummaryRecord& summary);
     void setResultComparison(const TestResultComparison& comparison);
 
 private slots:
@@ -75,4 +79,5 @@ private:
     bool databaseReady_ = false;
     bool motionCommandPending_ = false;
     int motionState_ = 0;
+    qint64 activeExecutionId_ = 0;
 };

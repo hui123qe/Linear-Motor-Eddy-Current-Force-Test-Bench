@@ -407,6 +407,46 @@ QString testBatchName(const TestParameters& parameters)
     return motorModel + QStringLiteral(" --") + specimenId;
 }
 
+QString experimentBaseName(const TestParameters& parameters)
+{
+    const QString motorModel = parameters.motorModel.trimmed();
+    const QString specimenId = parameters.specimenId.trimmed();
+    if (motorModel.isEmpty() || specimenId.isEmpty()) {
+        return {};
+    }
+
+    return motorModel + QLatin1Char('-') + specimenId;
+}
+
+TestMotionParameters selectedTestMotionParameters(
+    const TestParameters& parameters)
+{
+    switch (parameters.selectedTestType) {
+    case EddyCurrentTestType::RatedSpeed:
+        return parameters.ratedSpeedTest;
+    case EddyCurrentTestType::VariableSpeed:
+        return parameters.variableSpeedTest;
+    }
+
+    return {};
+}
+
+QJsonObject serializeTestParameters(const TestParameters& parameters)
+{
+    return toJson(parameters);
+}
+
+bool deserializeTestParameters(const QJsonObject& object,
+                               TestParameters* parameters,
+                               QString* errorMessage)
+{
+    if (parameters == nullptr) {
+        setError(errorMessage, QStringLiteral("配置接收对象不能为空。"));
+        return false;
+    }
+    return fromJson(object, parameters, errorMessage);
+}
+
 QString TestParametersStore::defaultFilePath()
 {
     const QString directory = QCoreApplication::applicationDirPath();

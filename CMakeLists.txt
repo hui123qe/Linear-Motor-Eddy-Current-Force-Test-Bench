@@ -28,6 +28,7 @@ if(NOT TARGET Qt6::QPSQLDriverPlugin)
 endif()
 
 add_subdirectory(third_party/qcustomplot)
+add_subdirectory(third_party/qxlsx/QXlsx EXCLUDE_FROM_ALL)
 
 set(ACSCL_PACKAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/acs")
 set(POSTGRESQL_RUNTIME_DIR "D:/Tool/postgresql/bin" CACHE PATH
@@ -82,6 +83,14 @@ qt_add_executable(EddyCurrentBench
     src/config/TestConfigurationService.cpp
     src/result/TestResultService.h
     src/result/TestResultService.cpp
+    src/experimentlog/ExperimentLogTypes.h
+    src/experimentlog/ExperimentLogTypes.cpp
+    src/experimentlog/ExperimentResultCalculator.h
+    src/experimentlog/ExperimentResultCalculator.cpp
+    src/experimentlog/ExperimentLogService.h
+    src/experimentlog/ExperimentLogService.cpp
+    src/experimentlog/ExperimentExportService.h
+    src/experimentlog/ExperimentExportService.cpp
     src/acquisition/AcquisitionTypes.h
     src/acquisition/DataAcquisitionService.h
     src/acquisition/DataAcquisitionService.cpp
@@ -137,6 +146,7 @@ target_link_libraries(EddyCurrentBench PRIVATE
     Qt6::Widgets
     Qt6::Sql
     QCustomPlot::QCustomPlot
+    QXlsx::QXlsx
     ThirdParty::acscl
 )
 

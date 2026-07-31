@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../acquisition/AcquisitionTypes.h"
+#include "../experimentlog/ExperimentLogTypes.h"
 
 #include <QObject>
 #include <QStringList>
@@ -47,6 +48,39 @@ public:
                                              qint64 offset,
                                              int limit,
                                              QString* errorMessage = nullptr);
+    [[nodiscard]] bool requestExperimentForceAggregate(
+        qint64 executionId,
+        int repetitionIndex,
+        const QString& tableName,
+        double statisticsStartMeters,
+        double statisticsEndMeters,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool storeExperimentRecord(
+        const ExperimentRecord& record,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool requestExperimentRecords(
+        qint64 requestId,
+        const ExperimentRecordFilter& filter,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool storeExperimentSummary(
+        const ExperimentSummaryBundle& bundle,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool readExperimentRecordForExport(
+        qint64 recordId,
+        ExperimentRecord* record,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool readExperimentSummaryForExport(
+        qint64 summaryId,
+        ExperimentSummaryBundle* bundle,
+        QString* errorMessage = nullptr);
+    [[nodiscard]] bool readExperimentRawDataForExport(
+        const QString& tableName,
+        double statisticsStartMeters,
+        double statisticsEndMeters,
+        qint64 offset,
+        int limit,
+        QVector<ExperimentSample>* samples,
+        QString* errorMessage = nullptr);
 
 signals:
     void readinessChanged(bool ready, const QString& message);
@@ -58,6 +92,25 @@ signals:
     void experimentDataRead(const QString& tableName,
                             qint64 offset,
                             const QVector<ExperimentSample>& samples);
+    void experimentForceAggregateRead(
+        qint64 executionId,
+        int repetitionIndex,
+        const ExperimentForceAggregate& aggregate);
+    void experimentForceAggregateFailed(qint64 executionId,
+                                        int repetitionIndex,
+                                        const QString& message);
+    void experimentRecordStored(const ExperimentRecord& record);
+    void experimentRecordStoreFailed(qint64 executionId,
+                                     int repetitionIndex,
+                                     const QString& message);
+    void experimentRecordsRead(
+        qint64 requestId,
+        const QVector<ExperimentRecordListItem>& records);
+    void experimentRecordsReadFailed(qint64 requestId,
+                                     const QString& message);
+    void experimentSummaryStored(const ExperimentSummaryBundle& bundle);
+    void experimentSummaryStoreFailed(qint64 executionId,
+                                      const QString& message);
     void databaseFailed(const QString& message);
 
 private:

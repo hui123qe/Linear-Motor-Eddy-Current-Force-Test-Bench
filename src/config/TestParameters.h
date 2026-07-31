@@ -2,6 +2,8 @@
 
 #include <QString>
 
+class QJsonObject;
+
 enum class EddyCurrentTestType
 {
     RatedSpeed,
@@ -53,6 +55,15 @@ struct TestParameters
 [[nodiscard]] bool validateTestParameters(const TestParameters& parameters,
                                           QString* errorMessage = nullptr);
 [[nodiscard]] QString testBatchName(const TestParameters& parameters);
+[[nodiscard]] QString experimentBaseName(const TestParameters& parameters);
+[[nodiscard]] TestMotionParameters selectedTestMotionParameters(
+    const TestParameters& parameters);
+[[nodiscard]] QJsonObject serializeTestParameters(
+    const TestParameters& parameters);
+[[nodiscard]] bool deserializeTestParameters(
+    const QJsonObject& object,
+    TestParameters* parameters,
+    QString* errorMessage = nullptr);
 
 class TestParametersStore final
 {

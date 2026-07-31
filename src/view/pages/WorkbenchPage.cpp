@@ -2,6 +2,8 @@
 
 #include "../../acquisition/DataAcquisitionService.h"
 #include "../../database/AcquisitionDatabaseService.h"
+#include "../../experimentlog/ExperimentLogService.h"
+#include "../../logging/AppLogger.h"
 #include "../../motion/MotionControlService.h"
 #include "../../workflow/TestExecutionService.h"
 #include "../components/chart/ChartWidget.h"
@@ -19,6 +21,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QStringList>
 #include <QVBoxLayout>
 
 #include <optional>
@@ -402,6 +405,16 @@ void WorkbenchPage::initializeConnections()
 
     TestExecutionService& executionService = TestExecutionService::instance();
     connect(&executionService,
+            &TestExecutionService::executionStarted,
+            this,
+            [this](qint64 executionId, const QString&) {
+                activeExecutionId_ = executionId;
+                qCInfo(logCompletionReceipt)
+                    << "[工作台][执行上下文] 设置 activeExecutionId"
+                    << "executionId=" << activeExecutionId_;
+                clearResults();
+            });
+    connect(&executionService,
             &TestExecutionService::executionFinished,
             this,
             [this] {
@@ -421,6 +434,45 @@ void WorkbenchPage::initializeConnections()
                 setMotionCommandPending(false);
                 QMessageBox::warning(
                     this, QStringLiteral("测试流程失败"), message);
+            });
+    ExperimentLogService& experimentLogService =
+        ExperimentLogService::instance();
+    connect(&experimentLogService,
+            &ExperimentLogService::experimentRecordSaved,
+            this,
+            &WorkbenchPage::setExperimentRecord);
+    connect(&experimentLogService,
+            &ExperimentLogService::experimentRecordProcessingFailed,
+            this,
+            [this](qint64 executionId,
+                   int repetitionIndex,
+                   const QString& message) {
+                qCWarning(logCompletionReceipt).noquote()
+                    << "[工作台][单次结果] 收到处理失败信号"
+                    << "executionId=" << executionId
+                    << "activeExecutionId=" << activeExecutionId_
+                    << "repetition=" << repetitionIndex
+                    << "reason=" << message;
+                if (executionId == activeExecutionId_) {
+                    currentStateValue_->setToolTip(message);
+                }
+            });
+    connect(&experimentLogService,
+            &ExperimentLogService::experimentSummarySaved,
+            this,
+            &WorkbenchPage::setExperimentSummary);
+    connect(&experimentLogService,
+            &ExperimentLogService::experimentSummaryProcessingFailed,
+            this,
+            [this](qint64 executionId, const QString& message) {
+                qCWarning(logCompletionReceipt).noquote()
+                    << "[工作台][整组结果] 收到处理失败信号"
+                    << "executionId=" << executionId
+                    << "activeExecutionId=" << activeExecutionId_
+                    << "reason=" << message;
+                if (executionId == activeExecutionId_) {
+                    currentStateValue_->setToolTip(message);
+                }
             });
     connect(&resultService_,
             &TestResultService::resultCleared,
@@ -570,12 +622,40 @@ void WorkbenchPage::updateControlAvailability()
         return;
     }
 
-    startButton_->setEnabled(controllerConnected_
-                             && acquisitionReady_
-                             && databaseReady_
-                             && configurationLocked_
-                             && motionState_ == 0
-                             && !motionCommandPending_);
+    const bool startAvailable = controllerConnected_
+                                && acquisitionReady_
+                                && databaseReady_
+                                && configurationLocked_
+                                && configuration_.has_value()
+                                && motionState_ == 0
+                                && !motionCommandPending_;
+    startButton_->setEnabled(startAvailable);
+    QStringList unavailableReasons;
+    if (!controllerConnected_) {
+        unavailableReasons.append(QStringLiteral("ACS 控制器未连接"));
+    }
+    if (!acquisitionReady_) {
+        unavailableReasons.append(QStringLiteral("数据采集未就绪"));
+    }
+    if (!databaseReady_) {
+        unavailableReasons.append(QStringLiteral("数据库未就绪"));
+    }
+    if (!configurationLocked_) {
+        unavailableReasons.append(QStringLiteral("参数未锁定"));
+    } else if (!configuration_.has_value()) {
+        unavailableReasons.append(QStringLiteral("测试参数未加载"));
+    }
+    if (motionState_ != 0) {
+        unavailableReasons.append(QStringLiteral("运动控制器不是空闲状态"));
+    }
+    if (motionCommandPending_) {
+        unavailableReasons.append(QStringLiteral("控制命令正在处理"));
+    }
+    startButton_->setToolTip(
+        startAvailable
+            ? QString()
+            : QStringLiteral("暂不能开始：%1")
+                  .arg(unavailableReasons.join(QStringLiteral("；"))));
     stopButton_->setEnabled(controllerConnected_
                             && isActiveMotionState(motionState_)
                             && !motionCommandPending_);
@@ -604,6 +684,67 @@ void WorkbenchPage::clearResults()
     fluctuationRateCard_->setValue(QStringLiteral("----"));
     multipleAverageForceCard_->setValue(QStringLiteral("----"));
     multipleAverageForceCoefficientCard_->setValue(QStringLiteral("----"));
+}
+
+void WorkbenchPage::setExperimentRecord(const ExperimentRecord& record)
+{
+    qCInfo(logCompletionReceipt)
+        << "[工作台][单次 UI 信号] 收到 experimentRecordSaved"
+        << "executionId=" << record.executionId
+        << "activeExecutionId=" << activeExecutionId_
+        << "repetition=" << record.repetitionIndex
+        << "recordId=" << record.id;
+    if (record.executionId != activeExecutionId_) {
+        qCWarning(logCompletionReceipt)
+            << "[工作台][单次 UI 更新] 忽略：executionId 不匹配"
+            << "executionId=" << record.executionId
+            << "activeExecutionId=" << activeExecutionId_
+            << "repetition=" << record.repetitionIndex;
+        return;
+    }
+
+    averageForceCard_->setValue(
+        formatAverageForce(record.statistics.averageForceNewtons));
+    eddyForceCoefficientCard_->setValue(formatForceCoefficient(
+        record.statistics.forceCoefficientNewtonSecondsPerMeter));
+    forceRangeCard_->setValue(
+        formatForceRange(record.statistics.forceRangeNewtons));
+    fluctuationRateCard_->setValue(formatFluctuationRate(
+        record.statistics.fluctuationRatePercent));
+    qCInfo(logCompletionReceipt)
+        << "[工作台][单次 UI 更新] 已更新每次循环结果卡片"
+        << "executionId=" << record.executionId
+        << "repetition=" << record.repetitionIndex
+        << "recordId=" << record.id;
+}
+
+void WorkbenchPage::setExperimentSummary(
+    const ExperimentSummaryRecord& summary)
+{
+    qCInfo(logCompletionReceipt)
+        << "[工作台][整组 UI 信号] 收到 experimentSummarySaved"
+        << "executionId=" << summary.executionId
+        << "activeExecutionId=" << activeExecutionId_
+        << "summaryId=" << summary.id;
+    if (summary.executionId != activeExecutionId_) {
+        qCWarning(logCompletionReceipt)
+            << "[工作台][整组 UI 更新] 忽略：executionId 不匹配"
+            << "executionId=" << summary.executionId
+            << "activeExecutionId=" << activeExecutionId_
+            << "summaryId=" << summary.id;
+        return;
+    }
+
+    multipleAverageForceCard_->setValue(formatAverageForce(
+        summary.statistics.multipleAverageForceNewtons));
+    multipleAverageForceCoefficientCard_->setValue(
+        formatForceCoefficient(
+            summary.statistics
+                .multipleAverageForceCoefficientNewtonSecondsPerMeter));
+    qCInfo(logCompletionReceipt)
+        << "[工作台][整组 UI 更新] 已更新最终实验结果卡片"
+        << "executionId=" << summary.executionId
+        << "summaryId=" << summary.id;
 }
 
 void WorkbenchPage::setResultComparison(const TestResultComparison& comparison)

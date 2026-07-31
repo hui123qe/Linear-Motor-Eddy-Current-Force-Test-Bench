@@ -1,5 +1,7 @@
 #include "acquisition/DataAcquisitionService.h"
 #include "database/AcquisitionDatabaseService.h"
+#include "experimentlog/ExperimentExportService.h"
+#include "experimentlog/ExperimentLogService.h"
 #include "logging/AppLogger.h"
 #include "motion/MotionControlService.h"
 #include "view/MainWindow.h"
@@ -38,6 +40,8 @@ int main(int argc, char* argv[])
             << "界面样式加载失败" << styleFile.errorString();
     }
 
+    ExperimentLogService::instance();
+    ExperimentExportService::instance();
     MainWindow window;
     MotionControlService& motionControlService = MotionControlService::instance();
     DataAcquisitionService& dataAcquisitionService =
@@ -56,6 +60,7 @@ int main(int argc, char* argv[])
     qCInfo(logApplication) << "应用事件循环结束，退出码" << exitCode;
     executionService.shutdown();
     dataAcquisitionService.shutdown();
+    ExperimentExportService::instance().shutdown();
     databaseService.shutdown();
     motionControlService.shutdown();
     qCInfo(logApplication) << "应用退出";

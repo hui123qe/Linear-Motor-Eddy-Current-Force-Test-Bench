@@ -8,6 +8,8 @@ Q_DECLARE_LOGGING_CATEGORY(logMotion)
 Q_DECLARE_LOGGING_CATEGORY(logAcquisition)
 Q_DECLARE_LOGGING_CATEGORY(logDatabase)
 Q_DECLARE_LOGGING_CATEGORY(logConfiguration)
+Q_DECLARE_LOGGING_CATEGORY(logExport)
+Q_DECLARE_LOGGING_CATEGORY(logCompletionReceipt)
 
 namespace AppLogging {
 

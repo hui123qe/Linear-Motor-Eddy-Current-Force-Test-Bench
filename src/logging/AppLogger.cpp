@@ -15,6 +15,10 @@ Q_LOGGING_CATEGORY(logMotion, "eddy.motion")
 Q_LOGGING_CATEGORY(logAcquisition, "eddy.acquisition")
 Q_LOGGING_CATEGORY(logDatabase, "eddy.database")
 Q_LOGGING_CATEGORY(logConfiguration, "eddy.configuration")
+Q_LOGGING_CATEGORY(logExport, "eddy.export")
+Q_LOGGING_CATEGORY(
+    logCompletionReceipt,
+    "\xE5\xAE\x8C\xE6\x88\x90\xE5\x9B\x9E\xE6\x89\xA7")
 
 namespace {
 
