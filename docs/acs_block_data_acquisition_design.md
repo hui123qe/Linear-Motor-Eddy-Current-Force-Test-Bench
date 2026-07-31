@@ -8,6 +8,7 @@
 - 已确认上位架构：单个 `AcsClient`、单个 ACS 连接和 `HANDLE`，由运动与采集两个业务服务共享。
 - 适用程序：`motorbuffer/ver1.0.prg` 中的 `#1` 采集程序。
 - 数据库存储设计：见 `docs/postgresql_acquisition_storage_design.md`。
+- 实验错误恢复设计：见 `docs/test_execution_error_recovery_design.md`。
 - 兼容基线：控制器程序标记版本 4.20，SPiiPlus C Library 7.7.0.0，Qt 6.5.3，MSVC x64。
 - 安全边界：本文不改变运动、安全联锁、急停或停止策略，不授权运行模拟器或真实设备。
 

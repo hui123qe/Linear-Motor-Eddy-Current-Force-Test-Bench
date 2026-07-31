@@ -1,5 +1,8 @@
 # PostgreSQL 采集数据异步读写设计
 
+实验流程的错误分类、清理恢复和界面状态规则见
+[`test_execution_error_recovery_design.md`](test_execution_error_recovery_design.md)。
+
 ## 1. 已确认约束
 
 - 使用 PostgreSQL，不使用 SQLite。
