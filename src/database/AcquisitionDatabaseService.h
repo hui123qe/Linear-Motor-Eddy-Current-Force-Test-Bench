@@ -38,6 +38,8 @@ public:
     [[nodiscard]] bool beginExperimentTable(const QString& motorModel,
                                             const QString& specimenId,
                                             int repetitionIndex,
+                                            int cycleIndex,
+                                            ExperimentMotionDirection direction,
                                             double samplePeriodSeconds,
                                             QString* errorMessage = nullptr);
     [[nodiscard]] bool appendBlock(const AcquisitionBlock& block,

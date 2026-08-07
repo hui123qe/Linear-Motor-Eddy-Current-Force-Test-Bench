@@ -19,7 +19,27 @@ void setError(QString* errorMessage, const QString& message)
 bool isActiveMotionState(int state)
 {
     return state == 10 || state == 20 || state == 30
-           || state == 40 || state == 50 || state == 60;
+           || state == 40 || state == 50 || state == 55
+           || state == 60 || state == 70 || state == 75;
+}
+
+constexpr int kRecordsPerCycle = 2;
+
+int plannedRecordCount(const TestParameters& parameters)
+{
+    return parameters.repeatCount * kRecordsPerCycle;
+}
+
+int cycleIndexForRecord(int recordIndex)
+{
+    return (recordIndex + kRecordsPerCycle - 1) / kRecordsPerCycle;
+}
+
+ExperimentMotionDirection directionForRecord(int recordIndex)
+{
+    return recordIndex % kRecordsPerCycle == 1
+               ? ExperimentMotionDirection::Forward
+               : ExperimentMotionDirection::Reverse;
 }
 
 qint64 nextExecutionId()
@@ -227,7 +247,7 @@ void TestExecutionService::handleCollectionStarted()
 
     collectionStarted_ = true;
 
-    // 运动程序包含全部重复次数，后续轮次只需重新启动采集。
+    // 运动程序包含全部正反向记录，后续记录只需重新启动采集。
     if (currentRepetitionIndex_ > 1) {
         return;
     }
@@ -261,8 +281,11 @@ void TestExecutionService::handleMotionStatusChanged(
         return;
     }
 
-    // 只在首次进入“返回零点”时停止本轮采集，避免状态轮询重复发送停止命令。
-    if (status.state == 60 && previousMotionState != 60) {
+    // 正向和反向测试各自产生一条记录，处理态是两条记录的固定边界。
+    const bool enteredProcessingState =
+        (status.state == 55 || status.state == 75)
+        && status.state != previousMotionState;
+    if (enteredProcessingState) {
         const AcquisitionState acquisitionState =
             DataAcquisitionService::instance().state();
         if (acquisitionState == AcquisitionState::Starting
@@ -360,6 +383,8 @@ void TestExecutionService::prepareRepetition(int repetitionIndex)
             parameters_.motorModel,
             parameters_.specimenId,
             repetitionIndex,
+            cycleIndexForRecord(repetitionIndex),
+            directionForRecord(repetitionIndex),
             kAcquisitionSamplePeriodSeconds,
             &errorMessage)) {
         failExecution(errorMessage, true);
@@ -386,12 +411,12 @@ void TestExecutionService::tryAdvanceAfterRepetition()
         }
         return;
     }
-    // 运动回零和数据库收尾是两个独立完成条件，缺一不可进入下一轮。
+    // 下位记录计数和数据库收尾是两个独立完成条件，缺一不可进入下一条记录。
     if (completedMotionCount_ < currentRepetitionIndex_ || tableOpen_) {
         return;
     }
 
-    if (currentRepetitionIndex_ >= parameters_.repeatCount) {
+    if (currentRepetitionIndex_ >= plannedRecordCount(parameters_)) {
         finalizeCurrentRepetition(ExperimentTerminalState::Completed, {});
         finalizeExecutionGroup(ExperimentTerminalState::Completed, {});
         resetExecutionContext();
@@ -428,10 +453,15 @@ void TestExecutionService::finalizeCurrentRepetition(
     context.executionId = executionId_;
     context.repetitionIndex = currentRepetitionIndex_;
     context.plannedRepeatCount = parameters_.repeatCount;
+    context.cycleIndex = cycleIndexForRecord(currentRepetitionIndex_);
+    context.direction = directionForRecord(currentRepetitionIndex_);
     context.baseExperimentName = baseExperimentName_;
     context.experimentName = baseExperimentName_
                              + QLatin1Char('-')
-                             + QString::number(currentRepetitionIndex_);
+                             + QString::number(context.cycleIndex)
+                             + QLatin1Char('-')
+                             + experimentMotionDirectionDisplayText(
+                                 context.direction);
     context.finishedAtUtc = QDateTime::currentDateTimeUtc();
     context.state = state;
     context.terminalReason = reason;

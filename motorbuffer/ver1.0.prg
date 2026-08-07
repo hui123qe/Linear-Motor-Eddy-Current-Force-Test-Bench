@@ -12,12 +12,13 @@
 !   零点
 !      ↓
 !   槽位起点 G_START_POS
-!      ↓
+!      ↓ 正向测试
 !   测试终点 G_END_POS
-!      ↓
-!   返回零点 G_ZERO_POS
-!      ↓
-!   重复 G_REPEAT_COUNT 次
+!      ↓ 结果处理等待
+!      ↓ 反向镜像测试
+!   槽位起点 G_START_POS
+!      ↓ 结果处理等待
+!   重复 G_REPEAT_COUNT 次，最后返回零点
 !
 ! 使用方法：
 !
@@ -54,11 +55,13 @@ REAL L_POSITION_JERK
 REAL L_TEST_ACC
 REAL L_TEST_DEC
 REAL L_TEST_JERK
+REAL L_RESULT_WAIT
 
 REAL L_MIN_POS
 REAL L_MAX_POS
 
 INT L_LOOP_INDEX
+INT L_RECORD_INDEX
 
 
 !======================================================================
@@ -145,6 +148,7 @@ L_POSITION_JERK = ABS(G_N_JERK)
 L_TEST_ACC = ABS(G_TEST_ACC)
 L_TEST_DEC = ABS(G_TEST_DEC)
 L_TEST_JERK = ABS(G_TEST_JERK)
+L_RESULT_WAIT = G_RESULT_WAIT
 
 
 
@@ -156,6 +160,11 @@ L_TEST_JERK = ABS(G_TEST_JERK)
 
 IF L_ZERO_POS > L_MAX_POS
     G_ERROR_CODE = 1010
+    GOTO PARAM_ERROR
+END
+
+IF L_RESULT_WAIT <= 0
+    G_ERROR_CODE = 1005
     GOTO PARAM_ERROR
 END
 
@@ -222,35 +231,7 @@ END
 
 
 !======================================================================
-! 十二、初始化循环变量
-!======================================================================
-
-L_LOOP_INDEX = 0
-
-
-
-!======================================================================
-! 十三、重复执行测试
-!======================================================================
-
-TEST_LOOP:
-
-
-! 如果循环次数已经达到目标值，则实验完成。
-IF L_LOOP_INDEX >= L_REPEAT_COUNT
-    GOTO TEST_FINISHED
-END
-
-
-! 在每次运动之前再次检查停止标志。
-IF G_ABORT_LATCH <> 0
-    GOTO HANDLE_ABORT
-END
-
-
-
-!======================================================================
-! 步骤 1：零点运动到槽位起点
+! 十二、运动到槽位起点
 !======================================================================
 
 G_STATE = 40
@@ -266,8 +247,29 @@ JERK(X) = L_POSITION_JERK
 ! 从当前位置运动开始位置起点。
 PTP/e X, L_START_POS
 
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
+
 !======================================================================
-! 步骤 2：槽位起点运动到测试终点
+! 十三、初始化循环变量并重复执行正反向测试
+!======================================================================
+
+L_LOOP_INDEX = 0
+L_RECORD_INDEX = 0
+
+TEST_LOOP:
+
+IF L_LOOP_INDEX >= L_REPEAT_COUNT
+    GOTO TEST_FINISHED
+END
+
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
+
+!======================================================================
+! 步骤 1：槽位起点正向运动到测试终点
 !======================================================================
 
 G_STATE = 50
@@ -288,10 +290,67 @@ JERK(X) = L_TEST_JERK
 ! 执行正式测试运动。
 PTP/e X, L_END_POS
 
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
 
 !======================================================================
-! 步骤 3：测试终点返回零点
+! 步骤 2：等待上位机完成正向记录处理
 !======================================================================
+
+L_RECORD_INDEX = L_RECORD_INDEX + 1
+G_CURRENT_COUNT = L_RECORD_INDEX
+G_STATE = 55
+
+WAIT L_RESULT_WAIT
+
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
+
+!======================================================================
+! 步骤 3：从正向停止位置执行反向镜像测试
+!======================================================================
+
+G_STATE = 70
+
+VEL(X) = L_TEST_VEL
+ACC(X) = L_TEST_ACC
+DEC(X) = L_TEST_DEC
+JERK(X) = L_TEST_JERK
+
+PTP/e X, L_START_POS
+
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
+
+!======================================================================
+! 步骤 4：等待上位机完成反向记录处理
+!======================================================================
+
+L_RECORD_INDEX = L_RECORD_INDEX + 1
+G_CURRENT_COUNT = L_RECORD_INDEX
+G_STATE = 75
+
+WAIT L_RESULT_WAIT
+
+IF G_ABORT_LATCH <> 0
+    GOTO HANDLE_ABORT
+END
+
+! 一次正向和一次反向实验全部完成后，循环次数加一。
+L_LOOP_INDEX = L_LOOP_INDEX + 1
+
+GOTO TEST_LOOP
+
+
+
+!======================================================================
+! 十四、实验正常完成并返回零点
+!======================================================================
+
+TEST_FINISHED:
 
 G_STATE = 60
 
@@ -313,61 +372,8 @@ IF G_ABORT_LATCH <> 0
     GOTO HANDLE_ABORT
 END
 
-
-
-!======================================================================
-! 步骤 4：本次完整循环完成
-!======================================================================
-
-! 只有完整执行完：
-!
-!   零点 -> 起点 -> 终点 -> 零点
-!
-! 才增加循环次数。
-L_LOOP_INDEX = L_LOOP_INDEX + 1
-
-
-! 将完成次数写给上位机。
-G_CURRENT_COUNT = L_LOOP_INDEX
-
-
-! 如果还有下一次循环，保持“返回零点”状态，等待上位机：
-!
-!   1. 停止并排空本次采集；
-!   2. 将本次数据异步提交到数据库；
-!   3. 创建下一次实验表；
-!   4. 重新置位 DCSTART_CON；
-!   5. 等待常驻采集 Buffer 置位 DCSTART，确认已经就绪。
-!
-! 这里只复用已有采集变量，不增加新的握手变量。
-IF L_LOOP_INDEX < L_REPEAT_COUNT
-
-    WHILE ^DCSTART_CON & ^G_ABORT_LATCH
-        WAIT 1
-    END
-
-
-
-    IF G_ABORT_LATCH <> 0
-        GOTO HANDLE_ABORT
-    END
-
-END
-
-
-! 继续下一次循环。
-GOTO TEST_LOOP
-
-
-
-!======================================================================
-! 十四、实验正常完成
-!======================================================================
-
-TEST_FINISHED:
-
-! 最终完成次数写回全局变量。
-G_CURRENT_COUNT = L_LOOP_INDEX
+! 最终完成记录数写回全局变量，每个循环固定包含正向、反向两条记录。
+G_CURRENT_COUNT = L_RECORD_INDEX
 
 ! 设置正常完成状态。
 G_STATE = 100
@@ -769,9 +775,13 @@ GLOBAL REAL G_TEST_VEL=500
 !
 ! 一次完整循环为：
 !
-!   零点 -> 起点 -> 终点 -> 零点
+!   起点 -> 终点（正向）-> 起点（反向）
 !
 GLOBAL INT G_REPEAT_COUNT =10
+
+! 每段正向或反向实验结束后的结果处理等待时间。
+! 当前控制器程序周期按 40 ms 计算，125 个周期约为 5 秒。
+GLOBAL REAL G_RESULT_WAIT = 125
 
 
 
@@ -853,8 +863,11 @@ GLOBAL INT G_KILL_REQ
 !   10    参数检查
 !   20    使能轴
 !   40    正在运动到槽位起点
-!   50    正在执行测试运动
-!   60    正在返回零点
+!   50    正在执行正向测试运动
+!   55    正向结果处理等待
+!   60    全部循环完成后正在返回零点
+!   70    正在执行反向测试运动
+!   75    反向结果处理等待
 !  100    实验正常完成
 !
 !   -1    参数错误
@@ -879,13 +892,9 @@ GLOBAL INT G_STATE
 GLOBAL INT G_ERROR_CODE
 
 
-! 已完成循环次数
+! 已完成实验记录数
 !
-! 只有在：
-!
-!   起点 -> 终点 -> 零点
-!
-! 全部完成后，才增加一次。
+! 每完成一次正向或反向测试增加一次，因此最终值为重复次数的两倍。
 GLOBAL INT G_CURRENT_COUNT
 
 

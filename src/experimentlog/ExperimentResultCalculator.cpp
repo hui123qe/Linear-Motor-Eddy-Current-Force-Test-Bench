@@ -25,7 +25,7 @@ ExperimentStatistics ExperimentResultCalculator::calculateSingle(
     }
 
     result.effectiveSampleCount = aggregate.effectiveSampleCount;
-    result.averageForceNewtons = aggregate.averageForceNewtons;
+    result.averageForceNewtons = std::abs(*aggregate.averageForceNewtons);
 
     const double forceRangeNewtons = *aggregate.maximumForceNewtons
                                      - *aggregate.minimumForceNewtons;
@@ -43,9 +43,9 @@ ExperimentStatistics ExperimentResultCalculator::calculateSingle(
     }
 
     if (result.forceRangeNewtons.has_value()
-        && *aggregate.averageForceNewtons != 0.0) {
+        && *result.averageForceNewtons != 0.0) {
         const double fluctuationRate = *result.forceRangeNewtons
-                                       / *aggregate.averageForceNewtons
+                                       / *result.averageForceNewtons
                                        * 100.0;
         if (std::isfinite(fluctuationRate)) {
             result.fluctuationRatePercent = fluctuationRate;

@@ -107,8 +107,11 @@ int writeRecordInformation(QXlsx::Document* document,
     const QVector<QPair<QString, QVariant>> values = {
         {QStringLiteral("实验名称"), record.experimentName},
         {QStringLiteral("基础实验名称"), record.baseExperimentName},
-        {QStringLiteral("重复序号"), record.repetitionIndex},
-        {QStringLiteral("计划重复次数"), record.plannedRepeatCount},
+        {QStringLiteral("记录序号"), record.repetitionIndex},
+        {QStringLiteral("循环序号"), record.cycleIndex},
+        {QStringLiteral("运动方向"),
+         experimentMotionDirectionDisplayText(record.direction)},
+        {QStringLiteral("计划循环次数"), record.plannedRepeatCount},
         {QStringLiteral("结束时间"),
          record.finishedAtUtc.toLocalTime().toString(
              QStringLiteral("yyyy-MM-dd HH:mm:ss"))},

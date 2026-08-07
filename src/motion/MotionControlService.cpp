@@ -20,7 +20,8 @@ void setError(QString* errorMessage, const QString& message)
 bool isActiveState(int state)
 {
     return state == 10 || state == 20 || state == 30
-           || state == 40 || state == 50 || state == 60;
+           || state == 40 || state == 50 || state == 55
+           || state == 60 || state == 70 || state == 75;
 }
 
 } // namespace

@@ -21,6 +21,12 @@ enum class ExperimentTerminalState
     Fault
 };
 
+enum class ExperimentMotionDirection
+{
+    Forward,
+    Reverse
+};
+
 enum class ExperimentLogEntryKind
 {
     SingleRecord,
@@ -66,6 +72,8 @@ struct ExperimentFinalContext
     qint64 executionId = 0;
     int repetitionIndex = 0;
     int plannedRepeatCount = 0;
+    int cycleIndex = 0;
+    ExperimentMotionDirection direction = ExperimentMotionDirection::Forward;
     QString baseExperimentName;
     QString experimentName;
     QDateTime finishedAtUtc;
@@ -97,6 +105,8 @@ struct ExperimentRecord
     QString baseExperimentName;
     int repetitionIndex = 0;
     int plannedRepeatCount = 0;
+    int cycleIndex = 0;
+    ExperimentMotionDirection direction = ExperimentMotionDirection::Forward;
     QDateTime finishedAtUtc;
     QString operatorName;
     ExperimentTerminalState state = ExperimentTerminalState::Fault;
@@ -143,6 +153,13 @@ struct ExperimentSummaryBundle
     ExperimentTerminalState* state);
 [[nodiscard]] QString experimentTerminalStateDisplayText(
     ExperimentTerminalState state);
+[[nodiscard]] QString experimentMotionDirectionDatabaseValue(
+    ExperimentMotionDirection direction);
+[[nodiscard]] bool experimentMotionDirectionFromDatabaseValue(
+    const QString& value,
+    ExperimentMotionDirection* direction);
+[[nodiscard]] QString experimentMotionDirectionDisplayText(
+    ExperimentMotionDirection direction);
 [[nodiscard]] QString formatAverageForce(
     const std::optional<double>& value);
 [[nodiscard]] QString formatForceCoefficient(
@@ -153,6 +170,7 @@ struct ExperimentSummaryBundle
     const std::optional<double>& value);
 
 Q_DECLARE_METATYPE(ExperimentTerminalState)
+Q_DECLARE_METATYPE(ExperimentMotionDirection)
 Q_DECLARE_METATYPE(ExperimentLogEntryKind)
 Q_DECLARE_METATYPE(ExperimentForceAggregate)
 Q_DECLARE_METATYPE(ExperimentStatistics)

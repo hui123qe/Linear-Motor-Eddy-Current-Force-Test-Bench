@@ -33,8 +33,7 @@ public slots:
     void setControllerConnected(bool connected, const QString& message);
     void setMotionStatus(int state, int errorCode, int currentCount);
     void setMotionCommandPending(bool pending);
-    void appendEddyForceSample(double timestampSeconds, double forceNewtons);
-    void appendEddyForceSamples(const QVector<QPointF>& samples);
+    void appendForcePositionSamples(const QVector<QPointF>& samples);
     void clearChartData();
     void clearResults();
     void setExperimentRecord(const ExperimentRecord& record);
@@ -67,6 +66,7 @@ private:
     MetricCard* fluctuationRateCard_ = nullptr;
     MetricCard* multipleAverageForceCard_ = nullptr;
     MetricCard* multipleAverageForceCoefficientCard_ = nullptr;
+    QLabel* latestRecordLabel_ = nullptr;
     ChartWidget* chartWidget_ = nullptr;
     StatusPill* configurationStatus_ = nullptr;
     QLabel* currentStateValue_ = nullptr;

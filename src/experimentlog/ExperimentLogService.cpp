@@ -112,6 +112,8 @@ void ExperimentLogService::handleExperimentFinalized(
     record.baseExperimentName = context.baseExperimentName;
     record.repetitionIndex = context.repetitionIndex;
     record.plannedRepeatCount = context.plannedRepeatCount;
+    record.cycleIndex = context.cycleIndex;
+    record.direction = context.direction;
     record.finishedAtUtc = context.finishedAtUtc;
     record.operatorName = context.operatorName;
     record.state = context.state;

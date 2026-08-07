@@ -31,7 +31,7 @@ signals:
     void collectionStarted();
     void collectionStopped();
     void blockReady(const AcquisitionBlock& block);
-    void forceSamplesReady(const QVector<QPointF>& samples);
+    void forcePositionSamplesReady(const QVector<QPointF>& samples);
     void collectionFailed(const QString& message);
 
 private slots:
@@ -60,7 +60,7 @@ private:
                                        int* blockIndex,
                                        int* sequence,
                                        QString* errorMessage) const;
-    void publishForceSamples(const AcquisitionBlock& block);
+    void publishForcePositionSamples(const AcquisitionBlock& block);
 
     AcsClient* client_ = nullptr;
     QTimer* pollTimer_ = nullptr;
@@ -68,7 +68,5 @@ private:
     bool initialized_ = false;
     bool connected_ = false;
     int lastConsumedSequence_ = 0;
-    double sessionStartSeconds_ = 0.0;
-    qint64 sessionSampleOffset_ = 0;
     QElapsedTimer stoppingTimer_;
 };

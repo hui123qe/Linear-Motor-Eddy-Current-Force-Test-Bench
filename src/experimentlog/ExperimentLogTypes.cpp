@@ -69,6 +69,50 @@ QString experimentTerminalStateDisplayText(ExperimentTerminalState state)
     return QStringLiteral("状态未知");
 }
 
+QString experimentMotionDirectionDatabaseValue(
+    ExperimentMotionDirection direction)
+{
+    switch (direction) {
+    case ExperimentMotionDirection::Forward:
+        return QStringLiteral("forward");
+    case ExperimentMotionDirection::Reverse:
+        return QStringLiteral("reverse");
+    }
+
+    return {};
+}
+
+bool experimentMotionDirectionFromDatabaseValue(
+    const QString& value,
+    ExperimentMotionDirection* direction)
+{
+    if (direction == nullptr) {
+        return false;
+    }
+    if (value == QStringLiteral("forward")) {
+        *direction = ExperimentMotionDirection::Forward;
+        return true;
+    }
+    if (value == QStringLiteral("reverse")) {
+        *direction = ExperimentMotionDirection::Reverse;
+        return true;
+    }
+    return false;
+}
+
+QString experimentMotionDirectionDisplayText(
+    ExperimentMotionDirection direction)
+{
+    switch (direction) {
+    case ExperimentMotionDirection::Forward:
+        return QStringLiteral("正向");
+    case ExperimentMotionDirection::Reverse:
+        return QStringLiteral("反向");
+    }
+
+    return QStringLiteral("方向未知");
+}
+
 QString formatAverageForce(const std::optional<double>& value)
 {
     return formatValue(

@@ -3,7 +3,6 @@
 #include "../logging/AppLogger.h"
 #include "../motion/AcsClient.h"
 
-#include <QDateTime>
 #include <QMetaObject>
 #include <QStringList>
 #include <QTimer>
@@ -207,14 +206,9 @@ bool DataAcquisitionService::startCollection(QString* errorMessage)
     }
 
     lastConsumedSequence_ = 0;
-    sessionSampleOffset_ = 0;
-    sessionStartSeconds_ = static_cast<double>(
-        QDateTime::currentMSecsSinceEpoch()) / 1000.0;
     qCInfo(logAcquisition)
-        << "[采集流程][启动请求] 会话本地状态已重置，sessionStartSeconds="
-        << sessionStartSeconds_
-        << "lastConsumed=" << lastConsumedSequence_
-        << "sampleOffset=" << sessionSampleOffset_;
+        << "[采集流程][启动请求] 会话本地状态已重置，lastConsumed="
+        << lastConsumedSequence_;
     setState(AcquisitionState::Starting);
     requestMetadata();
     return true;
@@ -493,7 +487,7 @@ void DataAcquisitionService::onBlockRead(const AcquisitionBlock& block)
         << lastConsumedSequence_
         << "nextExpected=" << (lastConsumedSequence_ + 1);
     emit blockReady(block);
-    publishForceSamples(block);
+    publishForcePositionSamples(block);
     qCDebug(logAcquisition)
         << "[采集流程][块消费] 数据已发布，立即查询下一块";
     requestMetadata();
@@ -693,28 +687,22 @@ bool DataAcquisitionService::selectNextBlock(
     return false;
 }
 
-void DataAcquisitionService::publishForceSamples(const AcquisitionBlock& block)
+void DataAcquisitionService::publishForcePositionSamples(
+    const AcquisitionBlock& block)
 {
     qCDebug(logAcquisition)
-        << "[采集流程][力数据发布] 开始，block=" << block.blockIndex
+        << "[采集流程][位移力数据发布] 开始，block=" << block.blockIndex
         << "sequence=" << block.sequence
-        << "points=" << block.forceNewtons.size()
-        << "sampleOffsetBefore=" << sessionSampleOffset_
-        << "samplePeriodSeconds=" << block.samplePeriodSeconds;
+        << "points=" << block.forceNewtons.size();
     QVector<QPointF> samples;
     samples.reserve(block.forceNewtons.size());
     for (qsizetype index = 0; index < block.forceNewtons.size(); ++index) {
-        const double timestampSeconds =
-            sessionStartSeconds_
-            + static_cast<double>(sessionSampleOffset_ + index)
-                  * block.samplePeriodSeconds;
-        samples.append(QPointF(timestampSeconds, block.forceNewtons.at(index)));
+        samples.append(QPointF(block.positionMeters.at(index),
+                               block.forceNewtons.at(index)));
     }
 
-    sessionSampleOffset_ += block.forceNewtons.size();
     qCDebug(logAcquisition)
-        << "[采集流程][力数据发布] 完成，sequence=" << block.sequence
-        << "points=" << samples.size()
-        << "sampleOffsetAfter=" << sessionSampleOffset_;
-    emit forceSamplesReady(samples);
+        << "[采集流程][位移力数据发布] 完成，sequence=" << block.sequence
+        << "points=" << samples.size();
+    emit forcePositionSamplesReady(samples);
 }

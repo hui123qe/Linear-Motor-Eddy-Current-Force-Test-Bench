@@ -133,15 +133,18 @@ QString normalizedTableComponent(const QString& value)
 
 QString createTableName(const QString& motorModel,
                         const QString& specimenId,
-                        int repetitionIndex)
+                        int cycleIndex,
+                        ExperimentMotionDirection direction)
 {
     const QString batch = normalizedTableComponent(motorModel)
                           + QStringLiteral("_")
                           + normalizedTableComponent(specimenId);
-    const QString suffix = QStringLiteral("_%1_r%2")
+    const QString suffix = QStringLiteral("_%1_c%2_%3")
                                .arg(QDateTime::currentDateTime().toString(
                                         QStringLiteral("yyyyMMdd_HHmmss_zzz")))
-                               .arg(repetitionIndex, 3, 10, QLatin1Char('0'));
+                               .arg(cycleIndex, 3, 10, QLatin1Char('0'))
+                               .arg(experimentMotionDirectionDatabaseValue(
+                                   direction));
     QString tableName = batch + suffix;
     if (tableName.toUtf8().size() <= kPostgreSqlIdentifierByteLimit) {
         return tableName;
@@ -196,6 +199,8 @@ QString experimentRecordSelectColumns(const QString& prefix = {})
         QStringLiteral("base_experiment_name"),
         QStringLiteral("repetition_index"),
         QStringLiteral("planned_repeat_count"),
+        QStringLiteral("cycle_index"),
+        QStringLiteral("motion_direction"),
         QStringLiteral("finished_at"),
         QStringLiteral("operator_name"),
         QStringLiteral("terminal_state"),
@@ -233,41 +238,47 @@ bool readExperimentRecord(const QSqlQuery& query,
     parsed.baseExperimentName = query.value(firstColumn + 3).toString();
     parsed.repetitionIndex = query.value(firstColumn + 4).toInt();
     parsed.plannedRepeatCount = query.value(firstColumn + 5).toInt();
-    parsed.finishedAtUtc = query.value(firstColumn + 6).toDateTime().toUTC();
-    parsed.operatorName = query.value(firstColumn + 7).toString();
+    parsed.cycleIndex = query.value(firstColumn + 6).toInt();
+    if (!experimentMotionDirectionFromDatabaseValue(
+            query.value(firstColumn + 7).toString(), &parsed.direction)) {
+        setError(errorMessage, QStringLiteral("数据库包含无法识别的运动方向。"));
+        return false;
+    }
+    parsed.finishedAtUtc = query.value(firstColumn + 8).toDateTime().toUTC();
+    parsed.operatorName = query.value(firstColumn + 9).toString();
     if (!experimentTerminalStateFromDatabaseValue(
-            query.value(firstColumn + 8).toString(), &parsed.state)) {
+            query.value(firstColumn + 10).toString(), &parsed.state)) {
         setError(errorMessage, QStringLiteral("数据库包含无法识别的实验最终状态。"));
         return false;
     }
-    parsed.terminalReason = query.value(firstColumn + 9).toString();
-    parsed.testSpeedMetersPerSecond = query.value(firstColumn + 10).toDouble();
-    parsed.statisticsStartMeters = query.value(firstColumn + 11).toDouble();
-    parsed.statisticsEndMeters = query.value(firstColumn + 12).toDouble();
-    parsed.rawSampleCount = query.value(firstColumn + 13).toLongLong();
+    parsed.terminalReason = query.value(firstColumn + 11).toString();
+    parsed.testSpeedMetersPerSecond = query.value(firstColumn + 12).toDouble();
+    parsed.statisticsStartMeters = query.value(firstColumn + 13).toDouble();
+    parsed.statisticsEndMeters = query.value(firstColumn + 14).toDouble();
+    parsed.rawSampleCount = query.value(firstColumn + 15).toLongLong();
     parsed.statistics.effectiveSampleCount =
-        query.value(firstColumn + 14).toLongLong();
-    if (!query.isNull(firstColumn + 15)) {
-        parsed.statistics.averageForceNewtons =
-            query.value(firstColumn + 15).toDouble();
-    }
-    if (!query.isNull(firstColumn + 16)) {
-        parsed.statistics.forceCoefficientNewtonSecondsPerMeter =
-            query.value(firstColumn + 16).toDouble();
-    }
+        query.value(firstColumn + 16).toLongLong();
     if (!query.isNull(firstColumn + 17)) {
-        parsed.statistics.forceRangeNewtons =
+        parsed.statistics.averageForceNewtons =
             query.value(firstColumn + 17).toDouble();
     }
     if (!query.isNull(firstColumn + 18)) {
-        parsed.statistics.fluctuationRatePercent =
+        parsed.statistics.forceCoefficientNewtonSecondsPerMeter =
             query.value(firstColumn + 18).toDouble();
     }
-    parsed.rawDataTableName = query.value(firstColumn + 19).toString();
+    if (!query.isNull(firstColumn + 19)) {
+        parsed.statistics.forceRangeNewtons =
+            query.value(firstColumn + 19).toDouble();
+    }
+    if (!query.isNull(firstColumn + 20)) {
+        parsed.statistics.fluctuationRatePercent =
+            query.value(firstColumn + 20).toDouble();
+    }
+    parsed.rawDataTableName = query.value(firstColumn + 21).toString();
 
     QJsonParseError parseError;
     const QJsonDocument parametersDocument = QJsonDocument::fromJson(
-        query.value(firstColumn + 20).toString().toUtf8(), &parseError);
+        query.value(firstColumn + 22).toString().toUtf8(), &parseError);
     QString parametersError;
     if (parseError.error != QJsonParseError::NoError
         || !parametersDocument.isObject()
@@ -350,6 +361,8 @@ public:
     void beginExperimentTable(const QString& motorModel,
                               const QString& specimenId,
                               int repetitionIndex,
+                              int cycleIndex,
+                              ExperimentMotionDirection direction,
                               double samplePeriodSeconds)
     {
         if (fatalError_) {
@@ -365,7 +378,7 @@ public:
         }
 
         const QString tableName =
-            createTableName(motorModel, specimenId, repetitionIndex);
+            createTableName(motorModel, specimenId, cycleIndex, direction);
         const QString qualifiedTableName = qualifyTable(tableName);
         QSqlQuery query(database_);
         const QString createSql =
@@ -618,7 +631,8 @@ public:
         QSqlQuery query(database_);
         query.prepare(
             QStringLiteral(
-                "SELECT COUNT(force_n), AVG(force_n), MIN(force_n), MAX(force_n) "
+                "SELECT COUNT(force_n), AVG(ABS(force_n)), "
+                "MIN(ABS(force_n)), MAX(ABS(force_n)) "
                 "FROM %1 WHERE position_m BETWEEN ? AND ?")
                 .arg(qualifyTable(tableName)));
         query.addBindValue(minimumPosition);
@@ -693,12 +707,13 @@ public:
         QSqlQuery query(database_);
         query.prepare(QStringLiteral(
             "INSERT INTO %1 (execution_id,experiment_name,base_experiment_name,"
-            "repetition_index,planned_repeat_count,finished_at,operator_name,"
+            "repetition_index,planned_repeat_count,cycle_index,motion_direction,"
+            "finished_at,operator_name,"
             "terminal_state,terminal_reason,test_speed_m_s,statistics_start_m,"
             "statistics_end_m,raw_sample_count,effective_sample_count,"
             "average_force_n,force_coefficient_n_s_m,force_range_n,"
             "fluctuation_rate_percent,raw_data_table_name,parameters_snapshot) "
-            "VALUES (?,?,?,?,?,?,NULLIF(?,''),?,NULLIF(?,''),?,?,?,?,?,?,?,?,?,"
+            "VALUES (?,?,?,?,?,?,?,?,NULLIF(?,''),?,NULLIF(?,''),?,?,?,?,?,?,?,?,?,"
             "NULLIF(?,''),CAST(? AS JSONB)) "
             "ON CONFLICT (execution_id,repetition_index) DO NOTHING RETURNING id")
                           .arg(recordsTable));
@@ -707,6 +722,9 @@ public:
         query.addBindValue(record.baseExperimentName);
         query.addBindValue(record.repetitionIndex);
         query.addBindValue(record.plannedRepeatCount);
+        query.addBindValue(record.cycleIndex);
+        query.addBindValue(
+            experimentMotionDirectionDatabaseValue(record.direction));
         query.addBindValue(record.finishedAtUtc);
         query.addBindValue(record.operatorName.trimmed());
         query.addBindValue(stateValue);
@@ -756,7 +774,7 @@ public:
         QSqlQuery existingQuery(database_);
         existingQuery.prepare(QStringLiteral(
             "SELECT id,experiment_name,base_experiment_name,terminal_state,"
-            "COALESCE(raw_data_table_name,'') FROM %1 "
+            "COALESCE(raw_data_table_name,''),cycle_index,motion_direction FROM %1 "
             "WHERE execution_id = ? AND repetition_index = ?")
                                   .arg(recordsTable));
         existingQuery.addBindValue(record.executionId);
@@ -778,7 +796,11 @@ public:
         if (existingQuery.value(1).toString() != record.experimentName
             || existingQuery.value(2).toString() != record.baseExperimentName
             || existingQuery.value(3).toString() != stateValue
-            || existingQuery.value(4).toString() != record.rawDataTableName) {
+            || existingQuery.value(4).toString() != record.rawDataTableName
+            || existingQuery.value(5).toInt() != record.cycleIndex
+            || existingQuery.value(6).toString()
+                   != experimentMotionDirectionDatabaseValue(
+                       record.direction)) {
             qCWarning(logCompletionReceipt)
                 << "[数据库线程][单次入库] 幂等记录内容冲突"
                 << "executionId=" << record.executionId
@@ -821,9 +843,11 @@ public:
         QString selectSql = QStringLiteral(
             "SELECT entry_kind,id,finished_at,operator_name,terminal_state,"
             "terminal_reason,experiment_name FROM ("
-            "SELECT 0 AS entry_kind,id,finished_at,operator_name,terminal_state,"
+            "SELECT 0 AS entry_kind,id,execution_id,repetition_index,"
+            "finished_at,operator_name,terminal_state,"
             "terminal_reason,experiment_name FROM %1 UNION ALL "
-            "SELECT 1 AS entry_kind,id,finished_at,operator_name,summary_state "
+            "SELECT 1 AS entry_kind,id,execution_id,0 AS repetition_index,"
+            "finished_at,operator_name,summary_state "
             "AS terminal_state,'' AS terminal_reason,base_experiment_name || "
             "'-汇总' AS experiment_name FROM %2) entries "
             "WHERE finished_at >= ? AND finished_at < ?")
@@ -838,7 +862,8 @@ public:
                 " OR POSITION(LOWER(?) IN LOWER(COALESCE(terminal_reason,''))) > 0)");
         }
         selectSql += QStringLiteral(
-            " ORDER BY finished_at DESC, id DESC LIMIT ? OFFSET ?");
+            " ORDER BY finished_at DESC,entry_kind DESC,id DESC "
+            "LIMIT ? OFFSET ?");
 
         QSqlQuery query(database_);
         query.prepare(selectSql);
@@ -1301,6 +1326,9 @@ private:
                 "base_experiment_name TEXT NOT NULL,"
                 "repetition_index INTEGER NOT NULL CHECK (repetition_index > 0),"
                 "planned_repeat_count INTEGER NOT NULL CHECK (planned_repeat_count > 0),"
+                "cycle_index INTEGER NOT NULL CHECK (cycle_index > 0),"
+                "motion_direction TEXT NOT NULL CHECK (motion_direction IN "
+                "('forward','reverse')),"
                 "finished_at TIMESTAMPTZ NOT NULL,"
                 "operator_name TEXT NULL,"
                 "terminal_state TEXT NOT NULL CHECK (terminal_state IN "
@@ -1319,6 +1347,26 @@ private:
                 "raw_data_table_name TEXT NULL,"
                 "parameters_snapshot JSONB NOT NULL,"
                 "UNIQUE (execution_id, repetition_index))")
+                .arg(recordsTable),
+            QStringLiteral(
+                "ALTER TABLE %1 ADD COLUMN IF NOT EXISTS cycle_index INTEGER")
+                .arg(recordsTable),
+            QStringLiteral(
+                "UPDATE %1 SET cycle_index = repetition_index "
+                "WHERE cycle_index IS NULL")
+                .arg(recordsTable),
+            QStringLiteral(
+                "ALTER TABLE %1 ALTER COLUMN cycle_index SET NOT NULL")
+                .arg(recordsTable),
+            QStringLiteral(
+                "ALTER TABLE %1 ADD COLUMN IF NOT EXISTS motion_direction TEXT")
+                .arg(recordsTable),
+            QStringLiteral(
+                "UPDATE %1 SET motion_direction = 'forward' "
+                "WHERE motion_direction IS NULL")
+                .arg(recordsTable),
+            QStringLiteral(
+                "ALTER TABLE %1 ALTER COLUMN motion_direction SET NOT NULL")
                 .arg(recordsTable),
             QStringLiteral(
                 "CREATE TABLE IF NOT EXISTS %1 ("
@@ -1551,6 +1599,8 @@ bool AcquisitionDatabaseService::beginExperimentTable(
     const QString& motorModel,
     const QString& specimenId,
     int repetitionIndex,
+    int cycleIndex,
+    ExperimentMotionDirection direction,
     double samplePeriodSeconds,
     QString* errorMessage)
 {
@@ -1560,6 +1610,8 @@ bool AcquisitionDatabaseService::beginExperimentTable(
     }
     if (motorModel.trimmed().isEmpty() || specimenId.trimmed().isEmpty()
         || repetitionIndex <= 0
+        || cycleIndex <= 0
+        || experimentMotionDirectionDatabaseValue(direction).isEmpty()
         || !std::isfinite(samplePeriodSeconds)
         || samplePeriodSeconds <= 0.0) {
         setError(errorMessage, QStringLiteral("实验表创建参数无效。"));
@@ -1572,9 +1624,16 @@ bool AcquisitionDatabaseService::beginExperimentTable(
          motorModel,
          specimenId,
          repetitionIndex,
+         cycleIndex,
+         direction,
          samplePeriodSeconds] {
             worker->beginExperimentTable(
-                motorModel, specimenId, repetitionIndex, samplePeriodSeconds);
+                motorModel,
+                specimenId,
+                repetitionIndex,
+                cycleIndex,
+                direction,
+                samplePeriodSeconds);
         },
         Qt::QueuedConnection);
     return true;
@@ -1701,6 +1760,9 @@ bool AcquisitionDatabaseService::storeExperimentRecord(
     QString parameterError;
     if (record.executionId <= 0 || record.repetitionIndex <= 0
         || record.plannedRepeatCount <= 0
+        || record.cycleIndex <= 0
+        || record.cycleIndex > record.plannedRepeatCount
+        || experimentMotionDirectionDatabaseValue(record.direction).isEmpty()
         || experimentTerminalStateDatabaseValue(record.state).isEmpty()
         || record.experimentName.trimmed().isEmpty()
         || record.baseExperimentName.trimmed().isEmpty()
@@ -1799,6 +1861,11 @@ bool AcquisitionDatabaseService::storeExperimentSummary(
             || record.repetitionIndex <= 0
             || record.repetitionIndex != index + 1
             || record.plannedRepeatCount != plannedRepeatCount
+            || record.cycleIndex != (index + 2) / 2
+            || record.direction
+                   != (index % 2 == 0
+                           ? ExperimentMotionDirection::Forward
+                           : ExperimentMotionDirection::Reverse)
             || experimentTerminalStateDatabaseValue(record.state).isEmpty()
             || (!isLastRecord
                 && record.state != ExperimentTerminalState::Completed)
@@ -1813,11 +1880,12 @@ bool AcquisitionDatabaseService::storeExperimentSummary(
         repetitionIndices.insert(record.repetitionIndex);
     }
     if (plannedRepeatCount <= 0
-        || bundle.records.size() > plannedRepeatCount
+        || bundle.records.size() > plannedRepeatCount * 2
         || repetitionIndices.size() != bundle.records.size()
-        || bundle.records.last().state != summary.state
+        || (bundle.records.last().state != ExperimentTerminalState::Completed
+            && bundle.records.last().state != summary.state)
         || (summary.state == ExperimentTerminalState::Completed
-            && bundle.records.size() != plannedRepeatCount)) {
+            && bundle.records.size() != plannedRepeatCount * 2)) {
         setError(errorMessage,
                  QStringLiteral("实验汇总状态或明细范围无效。"));
         return false;

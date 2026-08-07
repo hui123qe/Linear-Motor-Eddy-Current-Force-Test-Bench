@@ -102,7 +102,8 @@ QString rateText(double value)
 bool isActiveMotionState(int state)
 {
     return state == 10 || state == 20 || state == 30
-           || state == 40 || state == 50 || state == 60;
+           || state == 40 || state == 50 || state == 55
+           || state == 60 || state == 70 || state == 75;
 }
 
 QString motionStateText(int state, int errorCode, int currentCount)
@@ -125,9 +126,19 @@ QString motionStateText(int state, int errorCode, int currentCount)
     case 40:
         return QStringLiteral("运动到测试起点");
     case 50:
-        return QStringLiteral("测试运动（第 %1 次）").arg(currentCount + 1);
+        return QStringLiteral("第 %1 循环正向测试")
+            .arg(currentCount / 2 + 1);
+    case 55:
+        return QStringLiteral("第 %1 循环正向结果处理")
+            .arg((currentCount + 1) / 2);
     case 60:
         return QStringLiteral("返回零点");
+    case 70:
+        return QStringLiteral("第 %1 循环反向测试")
+            .arg(currentCount / 2 + 1);
+    case 75:
+        return QStringLiteral("第 %1 循环反向结果处理")
+            .arg(currentCount / 2);
     case 100:
         return QStringLiteral("正常完成");
     case -1:
@@ -201,12 +212,13 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
 
     auto* curvePanel = ViewHelpers::makePanel(
         QStringLiteral("实时曲线"),
-        QStringLiteral("显示后台传入的真实涡流力数据，当前不生成模拟数据"));
+        QStringLiteral("显示当前单次正向或反向实验的位移—涡流力关系"));
     curvePanel->setObjectName(QStringLiteral("curvePanel"));
     auto* curveLayout = qobject_cast<QVBoxLayout*>(curvePanel->layout());
     chartWidget_ = new ChartWidget(curvePanel);
-    chartWidget_->setXAxisMode(ChartXAxisMode::DateTime);
-    chartWidget_->setAxisLabels(QStringLiteral("时间"), QStringLiteral("涡流力 / N"));
+    chartWidget_->setXAxisMode(ChartXAxisMode::Numeric);
+    chartWidget_->setAxisLabels(QStringLiteral("位移 / m"),
+                                QStringLiteral("涡流力 / N"));
 
     ChartCurveConfig forceCurve;
     forceCurve.id = eddyForceCurveId();
@@ -255,7 +267,7 @@ void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
     currentStateValue_->setAlignment(Qt::AlignCenter);
     stateLayout->addWidget(currentStateValue_);
     auto* stateHelp = ViewHelpers::makeLabel(
-        QStringLiteral("状态集合：空闲 / 参数检查 / 轴使能 / 到零点 / 到测试起点 / 测试运动 / 返回零点 / 完成 / 故障"),
+        QStringLiteral("状态集合：空闲 / 参数检查 / 轴使能 / 到测试起点 / 正向测试 / 结果处理 / 反向测试 / 返回零点 / 完成 / 故障"),
         "motionStateHelp");
     stateHelp->setWordWrap(true);
     stateLayout->addWidget(stateHelp);
@@ -265,19 +277,22 @@ void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
 
     auto* resultPanel = ViewHelpers::makePanel(
         QStringLiteral("关键结果"),
-        QStringLiteral("单次循环完成后更新左栏，全部循环完成后更新右栏"));
+        QStringLiteral("每段正向或反向实验完成后更新左栏，全部循环完成后更新右栏"));
     auto* resultLayout = qobject_cast<QVBoxLayout*>(resultPanel->layout());
     auto* resultColumns = new QHBoxLayout;
     resultColumns->setSpacing(12);
 
     auto* cycleResultPanel = ViewHelpers::makePanel(
-        QStringLiteral("每次循环结果"),
-        QStringLiteral("当前已完成循环的关键指标"));
+        QStringLiteral("最近一次实验结果"),
+        QStringLiteral("显示最近完成的正向或反向实验关键指标"));
     auto* cycleResultLayout =
         qobject_cast<QVBoxLayout*>(cycleResultPanel->layout());
     auto* cycleResultGrid = new QGridLayout;
     cycleResultGrid->setHorizontalSpacing(10);
     cycleResultGrid->setVerticalSpacing(10);
+    latestRecordLabel_ = ViewHelpers::makeLabel(
+        QStringLiteral("尚无已完成实验"), "fieldLabel");
+    cycleResultLayout->addWidget(latestRecordLabel_);
     averageForceCard_ = new MetricCard(
         QStringLiteral("平均涡流力"), QStringLiteral("----"));
     eddyForceCoefficientCard_ = new MetricCard(
@@ -386,9 +401,13 @@ void WorkbenchPage::initializeConnections()
                 updateControlAvailability();
             });
     connect(&dataAcquisitionService,
-            &DataAcquisitionService::forceSamplesReady,
+            &DataAcquisitionService::collectionStarted,
             this,
-            &WorkbenchPage::appendEddyForceSamples);
+            &WorkbenchPage::clearChartData);
+    connect(&dataAcquisitionService,
+            &DataAcquisitionService::forcePositionSamplesReady,
+            this,
+            &WorkbenchPage::appendForcePositionSamples);
 
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
@@ -570,7 +589,7 @@ void WorkbenchPage::setMotionStatus(int state, int errorCode, int currentCount)
     }
 
     currentStateValue_->setText(motionStateText(state, errorCode, currentCount));
-    chartWidget_->start(state == 50);
+    chartWidget_->start(state == 50 || state == 70);
 
     updateControlAvailability();
 }
@@ -661,12 +680,8 @@ void WorkbenchPage::updateControlAvailability()
                             && !motionCommandPending_);
 }
 
-void WorkbenchPage::appendEddyForceSample(double timestampSeconds, double forceNewtons)
-{
-    chartWidget_->appendPoint(eddyForceCurveId(), timestampSeconds, forceNewtons);
-}
-
-void WorkbenchPage::appendEddyForceSamples(const QVector<QPointF>& samples)
+void WorkbenchPage::appendForcePositionSamples(
+    const QVector<QPointF>& samples)
 {
     chartWidget_->appendPoints(eddyForceCurveId(), samples);
 }
@@ -678,6 +693,7 @@ void WorkbenchPage::clearChartData()
 
 void WorkbenchPage::clearResults()
 {
+    latestRecordLabel_->setText(QStringLiteral("尚无已完成实验"));
     averageForceCard_->setValue(QStringLiteral("----"));
     eddyForceCoefficientCard_->setValue(QStringLiteral("----"));
     forceRangeCard_->setValue(QStringLiteral("----"));
@@ -702,6 +718,11 @@ void WorkbenchPage::setExperimentRecord(const ExperimentRecord& record)
             << "repetition=" << record.repetitionIndex;
         return;
     }
+
+    latestRecordLabel_->setText(
+        QStringLiteral("第 %1 循环 · %2")
+            .arg(record.cycleIndex)
+            .arg(experimentMotionDirectionDisplayText(record.direction)));
 
     averageForceCard_->setValue(
         formatAverageForce(record.statistics.averageForceNewtons));
