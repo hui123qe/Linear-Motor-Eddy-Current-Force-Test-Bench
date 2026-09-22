@@ -18,7 +18,8 @@
       "binaryDir": "${sourceDir}/build/vs2022-x64",
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "D:/Qt/6.5.3/msvc2019_64",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/vs2022-x64"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/vs2022-x64",
+        "POSTGRESQL_RUNTIME_DIR": "D:/Tool/postgresql/bin"
       }
     }
   ],

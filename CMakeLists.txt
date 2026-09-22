@@ -31,8 +31,13 @@ add_subdirectory(third_party/qcustomplot)
 add_subdirectory(third_party/qxlsx/QXlsx EXCLUDE_FROM_ALL)
 
 set(ACSCL_PACKAGE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/acs")
-set(POSTGRESQL_RUNTIME_DIR "D:/Tool/postgresql/bin" CACHE PATH
+set(POSTGRESQL_RUNTIME_DIR "" CACHE PATH
     "Directory containing the PostgreSQL x64 client runtime DLLs")
+if(NOT POSTGRESQL_RUNTIME_DIR)
+    message(FATAL_ERROR
+        "POSTGRESQL_RUNTIME_DIR is required. Set it in the selected "
+        "configure preset's cacheVariables.")
+endif()
 set(POSTGRESQL_RUNTIME_DLLS
     libpq.dll
     libssl-3-x64.dll

@@ -188,12 +188,20 @@ END
 
 ## 11. PostgreSQL 运行依赖
 
-已确认客户端来源：
+客户端运行库使用 PostgreSQL 18.4 x64。来源目录由公共 `vs2022-x64` 配置预设的 `cacheVariables` 指定：
 
-```text
-D:\Tool\postgresql\bin
-PostgreSQL 18.4 x64
+```json
+"POSTGRESQL_RUNTIME_DIR": "D:/Tool/postgresql/bin"
 ```
+
+配置和编译不再需要额外的命令行参数：
+
+```powershell
+cmake --preset vs2022-x64
+cmake --build --preset vs2022-x64-debug
+```
+
+如果 PostgreSQL 安装位置不同，需要同步修改公共预设中的 `POSTGRESQL_RUNTIME_DIR`。预设未提供该变量时，CMake 会停止并给出配置提示。
 
 目标程序随配置复制：
 
