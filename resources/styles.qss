@@ -178,6 +178,12 @@ QMainWindow, #applicationRoot {
     border-radius: 8px;
 }
 
+#machineStateCard {
+    background: #ffffff;
+    border: 1px solid #d6dfde;
+    border-radius: 8px;
+}
+
 #deviceGroupTitle {
     color: #38565c;
     font-size: 14px;

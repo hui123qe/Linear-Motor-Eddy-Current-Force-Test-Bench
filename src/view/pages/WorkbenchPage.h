@@ -77,8 +77,6 @@ private:
     QPushButton* homingButton_ = nullptr;
     bool configurationLocked_ = false;
     bool controllerConnected_ = false;
-    bool acquisitionReady_ = false;
-    bool databaseReady_ = false;
     bool motionCommandPending_ = false;
     bool chartCollectionActive_ = false;
     int motionState_ = 0;

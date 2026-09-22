@@ -3,12 +3,23 @@
 #include "../config/TestParameters.h"
 #include "../experimentlog/ExperimentLogTypes.h"
 
+#include <QMetaType>
 #include <QObject>
+#include <QString>
 
 #include <optional>
 
 struct AcquisitionBlock;
 struct AcsMotionStatus;
+
+enum class MachineState
+{
+    Error,
+    Idle,
+    Running
+};
+
+Q_DECLARE_METATYPE(MachineState)
 
 class TestExecutionService final : public QObject
 {
@@ -18,11 +29,14 @@ public:
     static TestExecutionService& instance();
 
     void shutdown();
+    [[nodiscard]] MachineState machineState() const;
+    [[nodiscard]] QString machineStateReason() const;
     [[nodiscard]] bool start(const TestParameters& parameters,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);
 
 signals:
+    void machineStateChanged(MachineState state, const QString& reason);
     void executionStarted(qint64 executionId,
                           const QString& baseExperimentName);
     void executionFinished();
@@ -57,6 +71,8 @@ private:
     void finishPendingTerminalState();
     void resetExecutionContext();
     void failExecution(const QString& message, bool databaseUsable);
+    void updateMachineState();
+    void setMachineState(MachineState state, const QString& reason);
 
     TestParameters parameters_;
     qint64 executionId_ = 0;
@@ -71,5 +87,13 @@ private:
     bool tableOpen_ = false;
     bool collectionStarted_ = false;
     bool userStopRequested_ = false;
+    bool controllerConnected_ = false;
+    bool acquisitionReady_ = false;
+    bool databaseReady_ = false;
+    MachineState machineState_ = MachineState::Error;
+    QString machineStateReason_ = QStringLiteral("ACS 控制器未连接");
+    QString controllerStatusMessage_;
+    QString acquisitionStatusMessage_;
+    QString databaseStatusMessage_;
     std::optional<ExperimentTerminalState> pendingTerminalState_;
 };

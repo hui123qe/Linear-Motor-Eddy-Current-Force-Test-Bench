@@ -2,6 +2,7 @@
 
 #include "widgets/StatusPill.h"
 #include "widgets/ViewHelpers.h"
+#include "../workflow/TestExecutionService.h"
 
 #include <QFrame>
 #include <QGridLayout>
@@ -36,6 +37,37 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     titleRow->addWidget(new StatusPill(QStringLiteral("自检通过"), QStringLiteral("ok"), this));
     outer->addLayout(titleRow);
 
+    auto* machineStateCard = new QFrame;
+    machineStateCard->setObjectName(QStringLiteral("machineStateCard"));
+    auto* machineStateLayout = new QVBoxLayout(machineStateCard);
+    machineStateLayout->setContentsMargins(12, 10, 12, 10);
+    machineStateLayout->setSpacing(6);
+    machineStateLayout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("机器状态"), "deviceGroupTitle"));
+
+    auto* machineStateRow = new QHBoxLayout;
+    machineStateRow->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("状态"), "stateName"));
+    machineStateRow->addStretch();
+    machineStatePill_ = new StatusPill(
+        QStringLiteral("错误"), QStringLiteral("danger"), machineStateCard);
+    machineStateRow->addWidget(machineStatePill_);
+    machineStateLayout->addLayout(machineStateRow);
+
+    machineStateReason_ = ViewHelpers::makeLabel(
+        QStringLiteral("ACS 控制器未连接"), "stateDetail");
+    machineStateReason_->setWordWrap(true);
+    machineStateLayout->addWidget(machineStateReason_);
+    outer->addWidget(machineStateCard);
+
+    TestExecutionService& executionService = TestExecutionService::instance();
+    connect(&executionService,
+            &TestExecutionService::machineStateChanged,
+            this,
+            &DeviceStatusPanel::updateMachineStateDisplay);
+    updateMachineStateDisplay(executionService.machineState(),
+                              executionService.machineStateReason());
+
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -60,13 +92,9 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     };
 
     addGroup(QStringLiteral("安全链"),
-             {{QStringLiteral("急停回路"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:21"), QStringLiteral("ok")},
-              {QStringLiteral("机械硬限位"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:21"), QStringLiteral("ok")},
-              {QStringLiteral("防护门 / 光幕"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:20"), QStringLiteral("ok")}});
+             {{QStringLiteral("防护门 / 光幕"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:20"), QStringLiteral("ok")}});
     addGroup(QStringLiteral("控制与通信"),
-             {{QStringLiteral("实时总线主站"), QStringLiteral("在线"), QStringLiteral("1 ms · 10:38:21"), QStringLiteral("ok")},
-              {QStringLiteral("拖动电机驱动器"), QStringLiteral("就绪"), QStringLiteral("站号 01 · 10:38:21"), QStringLiteral("ok")},
-              {QStringLiteral("数据采集模块"), QStringLiteral("在线"), QStringLiteral("20 kS/s · 10:38:20"), QStringLiteral("ok")}});
+             {{QStringLiteral("实时总线主站"), QStringLiteral("在线"), QStringLiteral("1 ms · 10:38:21"), QStringLiteral("ok")}});
     addGroup(QStringLiteral("传感器与辅助系统"),
              {{QStringLiteral("冷却水流量"), QStringLiteral("12.6 L/min"), QStringLiteral("范围 10-18 · 参与联锁"), QStringLiteral("ok")},
               {QStringLiteral("气浮台压力"), QStringLiteral("0.594 MPa"), QStringLiteral("范围 0.50-0.65 · 参与联锁"), QStringLiteral("ok")},
@@ -87,6 +115,32 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
 void DeviceStatusPanel::onInspectButtonClicked()
 {
     emit messageRequested(QStringLiteral("设备自检完成：全部项目通过（模拟）"));
+}
+
+void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
+                                                  const QString& reason)
+{
+    QString text;
+    QString level;
+    switch (state) {
+    case MachineState::Error:
+        text = QStringLiteral("错误");
+        level = QStringLiteral("danger");
+        break;
+    case MachineState::Idle:
+        text = QStringLiteral("空闲");
+        level = QStringLiteral("ok");
+        break;
+    case MachineState::Running:
+        text = QStringLiteral("运行中");
+        level = QStringLiteral("info");
+        break;
+    }
+
+    machineStatePill_->setText(text);
+    machineStatePill_->setLevel(level);
+    machineStatePill_->setToolTip(reason);
+    machineStateReason_->setText(reason);
 }
 
 QWidget* DeviceStatusPanel::createStateItem(const QString& name,

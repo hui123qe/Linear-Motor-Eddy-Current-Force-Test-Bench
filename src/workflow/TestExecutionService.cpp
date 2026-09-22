@@ -23,6 +23,25 @@ bool isActiveMotionState(int state)
            || state == 60 || state == 70 || state == 75;
 }
 
+bool isFaultMotionState(int state)
+{
+    return state == -1 || state == -4;
+}
+
+QString machineStateText(MachineState state)
+{
+    switch (state) {
+    case MachineState::Error:
+        return QStringLiteral("错误");
+    case MachineState::Idle:
+        return QStringLiteral("空闲");
+    case MachineState::Running:
+        return QStringLiteral("运行中");
+    }
+
+    return QStringLiteral("未知");
+}
+
 constexpr int kRecordsPerCycle = 2;
 
 int plannedRecordCount(const TestParameters& parameters)
@@ -66,12 +85,38 @@ TestExecutionService::TestExecutionService()
     qRegisterMetaType<ExperimentFinalContext>("ExperimentFinalContext");
     qRegisterMetaType<ExperimentGroupFinalContext>(
         "ExperimentGroupFinalContext");
+    qRegisterMetaType<MachineState>("MachineState");
 
     MotionControlService& motionService = MotionControlService::instance();
     DataAcquisitionService& acquisitionService =
         DataAcquisitionService::instance();
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
+
+    connect(&motionService,
+            &MotionControlService::connectionChanged,
+            this,
+            [this](bool connected, const QString& message) {
+                controllerConnected_ = connected;
+                controllerStatusMessage_ = message;
+                updateMachineState();
+            });
+    connect(&acquisitionService,
+            &DataAcquisitionService::readinessChanged,
+            this,
+            [this](bool ready, const QString& message) {
+                acquisitionReady_ = ready;
+                acquisitionStatusMessage_ = message;
+                updateMachineState();
+            });
+    connect(&databaseService,
+            &AcquisitionDatabaseService::readinessChanged,
+            this,
+            [this](bool ready, const QString& message) {
+                databaseReady_ = ready;
+                databaseStatusMessage_ = message;
+                updateMachineState();
+            });
 
     connect(&databaseService,
             &AcquisitionDatabaseService::experimentTableCreated,
@@ -122,6 +167,16 @@ TestExecutionService::~TestExecutionService()
     shutdown();
 }
 
+MachineState TestExecutionService::machineState() const
+{
+    return machineState_;
+}
+
+QString TestExecutionService::machineStateReason() const
+{
+    return machineStateReason_;
+}
+
 void TestExecutionService::shutdown()
 {
     if (currentRepetitionIndex_ == 0) {
@@ -149,6 +204,14 @@ void TestExecutionService::shutdown()
 bool TestExecutionService::start(const TestParameters& parameters,
                                  QString* errorMessage)
 {
+    updateMachineState();
+    if (machineState_ != MachineState::Idle) {
+        setError(
+            errorMessage,
+            QStringLiteral("机器当前为%1状态：%2")
+                .arg(machineStateText(machineState_), machineStateReason_));
+        return false;
+    }
     if (currentRepetitionIndex_ != 0) {
         setError(errorMessage, QStringLiteral("已有测试流程正在执行。"));
         return false;
@@ -177,6 +240,7 @@ bool TestExecutionService::start(const TestParameters& parameters,
     userStopRequested_ = false;
     pendingTerminalState_.reset();
     terminalReason_.clear();
+    setMachineState(MachineState::Running, QStringLiteral("测试正在运行"));
     emit executionStarted(executionId_, baseExperimentName_);
     prepareRepetition(1);
     return currentRepetitionIndex_ != 0;
@@ -184,6 +248,14 @@ bool TestExecutionService::start(const TestParameters& parameters,
 
 bool TestExecutionService::stop(QString* errorMessage)
 {
+    updateMachineState();
+    if (machineState_ != MachineState::Running) {
+        setError(
+            errorMessage,
+            QStringLiteral("机器当前为%1状态，无法停止：%2")
+                .arg(machineStateText(machineState_), machineStateReason_));
+        return false;
+    }
     if (currentRepetitionIndex_ == 0) {
         setError(errorMessage, QStringLiteral("当前没有正在执行的测试。"));
         return false;
@@ -204,6 +276,7 @@ bool TestExecutionService::stop(QString* errorMessage)
                  !motionAccepted ? motionError : acquisitionError);
         return false;
     }
+    setMachineState(MachineState::Running, QStringLiteral("正在停止测试"));
     return true;
 }
 
@@ -264,6 +337,7 @@ void TestExecutionService::handleMotionStatusChanged(
     const int previousMotionState = motionState_;
     motionState_ = status.state;
     completedMotionCount_ = status.currentCount;
+    updateMachineState();
 
     if (currentRepetitionIndex_ == 0) {
         return;
@@ -420,6 +494,7 @@ void TestExecutionService::tryAdvanceAfterRepetition()
         finalizeCurrentRepetition(ExperimentTerminalState::Completed, {});
         finalizeExecutionGroup(ExperimentTerminalState::Completed, {});
         resetExecutionContext();
+        updateMachineState();
         emit executionFinished();
         return;
     }
@@ -517,6 +592,7 @@ void TestExecutionService::finishPendingTerminalState()
     finalizeCurrentRepetition(state, reason);
     finalizeExecutionGroup(state, reason);
     resetExecutionContext();
+    updateMachineState();
 
     if (state == ExperimentTerminalState::Terminated) {
         emit executionStopped();
@@ -607,4 +683,59 @@ void TestExecutionService::failExecution(const QString& message,
     if (!tableOpen_ && acquisitionState == AcquisitionState::Idle) {
         finishPendingTerminalState();
     }
+}
+
+void TestExecutionService::updateMachineState()
+{
+    if (!controllerConnected_) {
+        setMachineState(
+            MachineState::Error,
+            controllerStatusMessage_.isEmpty()
+                ? QStringLiteral("ACS 控制器未连接")
+                : controllerStatusMessage_);
+        return;
+    }
+    if (!acquisitionReady_) {
+        setMachineState(
+            MachineState::Error,
+            acquisitionStatusMessage_.isEmpty()
+                ? QStringLiteral("数据采集服务未就绪")
+                : acquisitionStatusMessage_);
+        return;
+    }
+    if (!databaseReady_) {
+        setMachineState(
+            MachineState::Error,
+            databaseStatusMessage_.isEmpty()
+                ? QStringLiteral("数据库未就绪")
+                : databaseStatusMessage_);
+        return;
+    }
+    if (isFaultMotionState(motionState_)) {
+        setMachineState(
+            MachineState::Error,
+            QStringLiteral("运动控制器进入故障状态 %1").arg(motionState_));
+        return;
+    }
+    if (currentRepetitionIndex_ != 0 || isActiveMotionState(motionState_)) {
+        setMachineState(MachineState::Running, QStringLiteral("测试正在运行"));
+        return;
+    }
+
+    setMachineState(MachineState::Idle, QStringLiteral("机器已就绪"));
+}
+
+void TestExecutionService::setMachineState(MachineState state,
+                                           const QString& reason)
+{
+    if (machineState_ == state && machineStateReason_ == reason) {
+        return;
+    }
+
+    machineState_ = state;
+    machineStateReason_ = reason;
+    qCInfo(logApplication).noquote()
+        << "机器状态迁移：" << machineStateText(machineState_)
+        << "-" << machineStateReason_;
+    emit machineStateChanged(machineState_, machineStateReason_);
 }

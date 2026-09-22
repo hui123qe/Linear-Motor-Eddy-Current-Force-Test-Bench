@@ -21,7 +21,6 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QStringList>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -102,13 +101,6 @@ QString rateText(double value)
     return QStringLiteral("%1 %").arg(value, 0, 'f', 2);
 }
 
-bool isActiveMotionState(int state)
-{
-    return state == 10 || state == 20 || state == 30
-           || state == 40 || state == 50 || state == 55
-           || state == 60 || state == 70 || state == 75;
-}
-
 QString motionStateText(int state, int errorCode, int currentCount)
 {
     switch (state) {
@@ -155,6 +147,20 @@ QString motionStateText(int state, int errorCode, int currentCount)
     default:
         return QStringLiteral("未知状态 %1").arg(state);
     }
+}
+
+QString machineStateText(MachineState state)
+{
+    switch (state) {
+    case MachineState::Error:
+        return QStringLiteral("错误");
+    case MachineState::Idle:
+        return QStringLiteral("空闲");
+    case MachineState::Running:
+        return QStringLiteral("运行中");
+    }
+
+    return QStringLiteral("未知");
 }
 
 } // namespace
@@ -397,7 +403,6 @@ void WorkbenchPage::initializeConnections()
             &DataAcquisitionService::readinessChanged,
             this,
             [this](bool ready, const QString& message) {
-                acquisitionReady_ = ready;
                 if (!ready && controllerConnected_) {
                     currentStateValue_->setToolTip(message);
                 }
@@ -422,7 +427,6 @@ void WorkbenchPage::initializeConnections()
             &AcquisitionDatabaseService::readinessChanged,
             this,
             [this](bool ready, const QString& message) {
-                databaseReady_ = ready;
                 if (!ready) {
                     currentStateValue_->setToolTip(message);
                 }
@@ -430,6 +434,12 @@ void WorkbenchPage::initializeConnections()
             });
 
     TestExecutionService& executionService = TestExecutionService::instance();
+    connect(&executionService,
+            &TestExecutionService::machineStateChanged,
+            this,
+            [this](MachineState, const QString&) {
+                updateControlAvailability();
+            });
     connect(&executionService,
             &TestExecutionService::executionStarted,
             this,
@@ -517,6 +527,24 @@ bool WorkbenchPage::isConfigurationLocked() const
 
 void WorkbenchPage::onStartButtonClicked()
 {
+    const TestExecutionService& executionService =
+        TestExecutionService::instance();
+    if (executionService.machineState() != MachineState::Idle) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("机器当前为%1状态：%2")
+                .arg(machineStateText(executionService.machineState()),
+                     executionService.machineStateReason()));
+        return;
+    }
+    if (motionCommandPending_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("控制命令正在处理中，请稍后再试。"));
+        return;
+    }
     if (!configurationLocked_ || !configuration_.has_value()) {
         QMessageBox::warning(
             this,
@@ -534,6 +562,25 @@ void WorkbenchPage::onStartButtonClicked()
 
 void WorkbenchPage::onStopButtonClicked()
 {
+    const TestExecutionService& executionService =
+        TestExecutionService::instance();
+    if (executionService.machineState() != MachineState::Running) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("停止测试失败"),
+            QStringLiteral("机器当前为%1状态：%2")
+                .arg(machineStateText(executionService.machineState()),
+                     executionService.machineStateReason()));
+        return;
+    }
+    if (motionCommandPending_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("停止测试失败"),
+            QStringLiteral("控制命令正在处理中，请稍后再试。"));
+        return;
+    }
+
     setMotionCommandPending(true);
     stopTest();
 }
@@ -577,7 +624,6 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
     controllerConnected_ = connected;
     currentStateValue_->setToolTip(message);
     if (!connected) {
-        acquisitionReady_ = false;
         motionCommandPending_ = false;
         currentStateValue_->setText(QStringLiteral("ACS 未连接"));
         chartWidget_->start(false);
@@ -648,43 +694,19 @@ void WorkbenchPage::updateControlAvailability()
         return;
     }
 
-    const bool startAvailable = controllerConnected_
-                                && acquisitionReady_
-                                && databaseReady_
-                                && configurationLocked_
-                                && configuration_.has_value()
-                                && motionState_ == 0
-                                && !motionCommandPending_;
-    startButton_->setEnabled(startAvailable);
-    QStringList unavailableReasons;
-    if (!controllerConnected_) {
-        unavailableReasons.append(QStringLiteral("ACS 控制器未连接"));
-    }
-    if (!acquisitionReady_) {
-        unavailableReasons.append(QStringLiteral("数据采集未就绪"));
-    }
-    if (!databaseReady_) {
-        unavailableReasons.append(QStringLiteral("数据库未就绪"));
-    }
-    if (!configurationLocked_) {
-        unavailableReasons.append(QStringLiteral("参数未锁定"));
-    } else if (!configuration_.has_value()) {
-        unavailableReasons.append(QStringLiteral("测试参数未加载"));
-    }
-    if (motionState_ != 0) {
-        unavailableReasons.append(QStringLiteral("运动控制器不是空闲状态"));
-    }
-    if (motionCommandPending_) {
-        unavailableReasons.append(QStringLiteral("控制命令正在处理"));
-    }
+    startButton_->setEnabled(true);
+    stopButton_->setEnabled(true);
+
+    const TestExecutionService& executionService =
+        TestExecutionService::instance();
     startButton_->setToolTip(
-        startAvailable
-            ? QString()
-            : QStringLiteral("暂不能开始：%1")
-                  .arg(unavailableReasons.join(QStringLiteral("；"))));
-    stopButton_->setEnabled(controllerConnected_
-                            && isActiveMotionState(motionState_)
-                            && !motionCommandPending_);
+        executionService.machineState() == MachineState::Idle
+            ? QStringLiteral("开始测试")
+            : QStringLiteral("点击后显示无法开始的原因"));
+    stopButton_->setToolTip(
+        executionService.machineState() == MachineState::Running
+            ? QStringLiteral("停止当前测试")
+            : QStringLiteral("点击后显示无法停止的原因"));
 }
 
 void WorkbenchPage::appendForcePositionSamples(
