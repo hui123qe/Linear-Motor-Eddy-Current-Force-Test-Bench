@@ -44,6 +44,8 @@ private slots:
     void onStartButtonClicked();
     void onStopButtonClicked();
     void onHomingButtonClicked();
+    void beginChartCollection();
+    void commitChartCollection();
 
 private:
     void initializePageHeader(QVBoxLayout* pageLayout);
@@ -78,6 +80,8 @@ private:
     bool acquisitionReady_ = false;
     bool databaseReady_ = false;
     bool motionCommandPending_ = false;
+    bool chartCollectionActive_ = false;
     int motionState_ = 0;
     qint64 activeExecutionId_ = 0;
+    QVector<QPointF> pendingChartSamples_;
 };

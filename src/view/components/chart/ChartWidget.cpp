@@ -208,6 +208,31 @@ void ChartWidget::appendPoints(const QString& curveId, const QVector<QPointF>& p
     trimCurve(iterator.value());
 }
 
+void ChartWidget::replacePoints(const QString& curveId,
+                                const QVector<QPointF>& points)
+{
+    if (!isUiThread()) {
+        qDebug() << "ChartWidget rejected a data replacement from a non-UI thread; use a queued Qt connection";
+        return;
+    }
+
+    const auto iterator = curves_.find(curveId);
+    if (iterator == curves_.end()) {
+        return;
+    }
+
+    iterator->graph->data()->clear();
+    appendPoints(curveId, points);
+    if (!isEmpty() && userInteracting_ >= 0) {
+        if (scrollPolicy_ == ScrollPolicy::AutoScroll) {
+            updateAutoScrollRange();
+        } else {
+            updateOverviewRange();
+        }
+    }
+    replot();
+}
+
 void ChartWidget::clearCurve(const QString& curveId)
 {
     const auto iterator = curves_.find(curveId);

@@ -24,9 +24,12 @@
 #include <QStringList>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <optional>
 
 namespace {
+
+constexpr qsizetype maximumChartPointCount = 100000;
 
 const QString& eddyForceCurveId()
 {
@@ -224,7 +227,7 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
     forceCurve.id = eddyForceCurveId();
     forceCurve.displayName = QStringLiteral("涡流力");
     forceCurve.color = QColor(QStringLiteral("#1f78d1"));
-    forceCurve.maximumPointCount = 100000;
+    forceCurve.maximumPointCount = static_cast<int>(maximumChartPointCount);
     chartWidget_->addCurve(forceCurve);
     curveLayout->addWidget(chartWidget_, 1);
     primaryRow->addWidget(curvePanel, 5);
@@ -403,7 +406,11 @@ void WorkbenchPage::initializeConnections()
     connect(&dataAcquisitionService,
             &DataAcquisitionService::collectionStarted,
             this,
-            &WorkbenchPage::clearChartData);
+            &WorkbenchPage::beginChartCollection);
+    connect(&dataAcquisitionService,
+            &DataAcquisitionService::collectionStopped,
+            this,
+            &WorkbenchPage::commitChartCollection);
     connect(&dataAcquisitionService,
             &DataAcquisitionService::forcePositionSamplesReady,
             this,
@@ -683,11 +690,52 @@ void WorkbenchPage::updateControlAvailability()
 void WorkbenchPage::appendForcePositionSamples(
     const QVector<QPointF>& samples)
 {
-    chartWidget_->appendPoints(eddyForceCurveId(), samples);
+    if (!chartCollectionActive_ || !configuration_.has_value()) {
+        return;
+    }
+
+    const TestMotionParameters motionParameters =
+        selectedTestMotionParameters(*configuration_);
+    const double minimumPosition =
+        std::min(motionParameters.acquisitionStartMeters,
+                 motionParameters.acquisitionEndMeters);
+    const double maximumPosition =
+        std::max(motionParameters.acquisitionStartMeters,
+                 motionParameters.acquisitionEndMeters);
+    for (const QPointF& sample : samples) {
+        if (sample.x() >= minimumPosition && sample.x() <= maximumPosition) {
+            pendingChartSamples_.append(sample);
+        }
+    }
+
+    const qsizetype overflow =
+        pendingChartSamples_.size() - maximumChartPointCount;
+    if (overflow > 0) {
+        pendingChartSamples_.remove(0, overflow);
+    }
+}
+
+void WorkbenchPage::beginChartCollection()
+{
+    pendingChartSamples_.clear();
+    chartCollectionActive_ = true;
+}
+
+void WorkbenchPage::commitChartCollection()
+{
+    if (!chartCollectionActive_) {
+        return;
+    }
+
+    chartCollectionActive_ = false;
+    chartWidget_->replacePoints(eddyForceCurveId(), pendingChartSamples_);
+    pendingChartSamples_.clear();
 }
 
 void WorkbenchPage::clearChartData()
 {
+    chartCollectionActive_ = false;
+    pendingChartSamples_.clear();
     chartWidget_->clearCurve(eddyForceCurveId());
 }
 

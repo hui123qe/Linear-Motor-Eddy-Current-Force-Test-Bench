@@ -43,6 +43,7 @@ public:
 public slots:
     void appendPoint(const QString& curveId, double x, double y);
     void appendPoints(const QString& curveId, const QVector<QPointF>& points);
+    void replacePoints(const QString& curveId, const QVector<QPointF>& points);
     void clearCurve(const QString& curveId);
     void clearAll();
 
