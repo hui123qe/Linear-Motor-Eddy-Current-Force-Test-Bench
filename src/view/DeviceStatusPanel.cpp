@@ -2,13 +2,20 @@
 
 #include "widgets/StatusPill.h"
 #include "widgets/ViewHelpers.h"
+#include "../motion/MotionControlService.h"
 #include "../workflow/TestExecutionService.h"
 
+#include <QAbstractButton>
+#include <QEvent>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QLabel>
+#include <QMessageBox>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStyle>
 #include <QVBoxLayout>
 
 namespace {
@@ -58,6 +65,19 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
         QStringLiteral("ACS 控制器未连接"), "stateDetail");
     machineStateReason_->setWordWrap(true);
     machineStateLayout->addWidget(machineStateReason_);
+
+    auto* machineModeRow = new QHBoxLayout;
+    machineModeRow->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("模式"), "stateName"));
+    machineModeRow->addStretch();
+    machineModeButton_ =
+        ViewHelpers::makeButton(QStringLiteral("自动模式"), QStringLiteral("primary"));
+    connect(machineModeButton_,
+            &QPushButton::clicked,
+            this,
+            &DeviceStatusPanel::showMachineModeDialog);
+    machineModeRow->addWidget(machineModeButton_);
+    machineStateLayout->addLayout(machineModeRow);
     outer->addWidget(machineStateCard);
 
     TestExecutionService& executionService = TestExecutionService::instance();
@@ -93,12 +113,77 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
 
     addGroup(QStringLiteral("安全链"),
              {{QStringLiteral("防护门 / 光幕"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:20"), QStringLiteral("ok")}});
-    addGroup(QStringLiteral("控制与通信"),
-             {{QStringLiteral("实时总线主站"), QStringLiteral("在线"), QStringLiteral("1 ms · 10:38:21"), QStringLiteral("ok")}});
-    addGroup(QStringLiteral("传感器与辅助系统"),
-             {{QStringLiteral("冷却水流量"), QStringLiteral("12.6 L/min"), QStringLiteral("范围 10-18 · 参与联锁"), QStringLiteral("ok")},
-              {QStringLiteral("气浮台压力"), QStringLiteral("0.594 MPa"), QStringLiteral("范围 0.50-0.65 · 参与联锁"), QStringLiteral("ok")},
-              {QStringLiteral("电机温度"), QStringLiteral("42.8 C"), QStringLiteral("预警阈值 75 C · 10:38:19"), QStringLiteral("info")}});
+
+    auto* communicationGroup = new QFrame;
+    communicationGroup->setObjectName(QStringLiteral("deviceGroup"));
+    auto* communicationLayout = new QVBoxLayout(communicationGroup);
+    communicationLayout->setContentsMargins(10, 10, 10, 10);
+    communicationLayout->setSpacing(7);
+    communicationLayout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("控制与通信"), "deviceGroupTitle"));
+
+    acsStateItem_ = createStateItem(
+        QStringLiteral("ACS 控制器"),
+        QStringLiteral("离线"),
+        QString(),
+        QStringLiteral("neutral"));
+    acsStateItem_->setProperty("interactive", true);
+    acsStateItem_->setCursor(Qt::PointingHandCursor);
+    acsStateItem_->installEventFilter(this);
+    const QList<QWidget*> acsItemChildren =
+        acsStateItem_->findChildren<QWidget*>();
+    for (QWidget* child : acsItemChildren) {
+        child->setAttribute(Qt::WA_TransparentForMouseEvents);
+    }
+    acsConnectionPill_ = acsStateItem_->findChild<StatusPill*>();
+    communicationLayout->addWidget(acsStateItem_);
+    contentLayout->addWidget(communicationGroup);
+
+    MotionControlService& motionControlService =
+        MotionControlService::instance();
+    connect(&motionControlService,
+            &MotionControlService::connectionChanged,
+            this,
+            &DeviceStatusPanel::updateAcsConnectionDisplay);
+    connect(&motionControlService,
+            &MotionControlService::machineModeChanged,
+            this,
+            [this](MachineMode mode) {
+                updateMachineModeDisplay(mode);
+            });
+    updateMachineModeDisplay(motionControlService.machineMode());
+    connect(&motionControlService,
+            &MotionControlService::sensorReadingsChanged,
+            this,
+            &DeviceStatusPanel::updateSensorReadings);
+    connect(&motionControlService,
+            &MotionControlService::forceTareWritten,
+            this,
+            &DeviceStatusPanel::handleForceTareWritten);
+    connect(&motionControlService,
+            &MotionControlService::forceTareFailed,
+            this,
+            &DeviceStatusPanel::handleForceTareFailed);
+
+    auto* sensorGroup = new QFrame;
+    sensorGroup->setObjectName(QStringLiteral("deviceGroup"));
+    auto* sensorLayout = new QVBoxLayout(sensorGroup);
+    sensorLayout->setContentsMargins(10, 10, 10, 10);
+    sensorLayout->setSpacing(7);
+    sensorLayout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("传感器"), "deviceGroupTitle"));
+    sensorLayout->addWidget(createPressureValuesCard());
+    forceSensorCard_ = createForceValueCard();
+    forceSensorCard_->setProperty("interactive", true);
+    forceSensorCard_->setCursor(Qt::PointingHandCursor);
+    forceSensorCard_->installEventFilter(this);
+    const QList<QWidget*> forceCardChildren =
+        forceSensorCard_->findChildren<QWidget*>();
+    for (QWidget* child : forceCardChildren) {
+        child->setAttribute(Qt::WA_TransparentForMouseEvents);
+    }
+    sensorLayout->addWidget(forceSensorCard_);
+    contentLayout->addWidget(sensorGroup);
     contentLayout->addStretch();
 
     scroll->setWidget(content);
@@ -112,9 +197,228 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     outer->addWidget(inspect);
 }
 
+bool DeviceStatusPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == acsStateItem_
+        && event->type() == QEvent::MouseButtonRelease) {
+        const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            showAcsConnectionDialog();
+            return true;
+        }
+    }
+    if (watched == forceSensorCard_
+        && event->type() == QEvent::MouseButtonRelease) {
+        const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            showForceTareDialog();
+            return true;
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
+}
+
 void DeviceStatusPanel::onInspectButtonClicked()
 {
     emit messageRequested(QStringLiteral("设备自检完成：全部项目通过（模拟）"));
+}
+
+void DeviceStatusPanel::updateAcsConnectionDisplay(
+    bool connected,
+    const QString&)
+{
+    acsConnected_ = connected;
+    if (acsConnectionPill_ == nullptr) {
+        return;
+    }
+
+    acsConnectionPill_->setText(
+        connected ? QStringLiteral("在线") : QStringLiteral("离线"));
+    acsConnectionPill_->setLevel(
+        connected ? QStringLiteral("ok") : QStringLiteral("danger"));
+    if (!connected) {
+        forceTarePending_ = false;
+        clearSensorReadings();
+    }
+}
+
+void DeviceStatusPanel::updateSensorReadings(
+    const AcsSensorReadings& readings)
+{
+    for (std::size_t index = 0; index < pressureValueLabels_.size(); ++index) {
+        setSensorValue(
+            pressureValueLabels_.at(index),
+            QString::number(readings.pressureValues.at(index), 'g', 10),
+            true);
+    }
+    setSensorValue(
+        forceValueLabel_,
+        QString::number(readings.forceValue, 'g', 10),
+        true);
+}
+
+void DeviceStatusPanel::handleForceTareWritten()
+{
+    forceTarePending_ = false;
+    QMessageBox::information(
+        this,
+        QStringLiteral("力传感器去皮"),
+        QStringLiteral("去皮请求已写入 ACS 控制器。"));
+}
+
+void DeviceStatusPanel::handleForceTareFailed(const QString& message)
+{
+    forceTarePending_ = false;
+    QMessageBox::warning(
+        this, QStringLiteral("力传感器去皮失败"), message);
+}
+
+void DeviceStatusPanel::showAcsConnectionDialog()
+{
+    TestExecutionService& executionService =
+        TestExecutionService::instance();
+    if (acsConnected_
+        && executionService.machineState() == MachineState::Running) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法断开 ACS 控制器"),
+            QStringLiteral("机器当前处于运行状态，请先停止测试后再断开连接。"));
+        return;
+    }
+
+    const bool disconnectRequested = acsConnected_;
+    QMessageBox dialog(this);
+    dialog.setIcon(QMessageBox::Question);
+    dialog.setWindowTitle(QStringLiteral("ACS 控制器连接"));
+    dialog.setText(
+        disconnectRequested
+            ? QStringLiteral("ACS 控制器当前在线，是否断开连接？")
+            : QStringLiteral("ACS 控制器当前离线，是否发起连接？"));
+    QAbstractButton* connectionButton = dialog.addButton(
+        disconnectRequested ? QStringLiteral("断开连接")
+                            : QStringLiteral("连接"),
+        disconnectRequested ? QMessageBox::DestructiveRole
+                            : QMessageBox::AcceptRole);
+    dialog.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
+    dialog.exec();
+    if (dialog.clickedButton() != connectionButton) {
+        return;
+    }
+
+    MotionControlService& motionControlService =
+        MotionControlService::instance();
+    if (disconnectRequested) {
+        if (executionService.machineState() == MachineState::Running) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("无法断开 ACS 控制器"),
+                QStringLiteral(
+                    "机器当前处于运行状态，请先停止测试后再断开连接。"));
+            return;
+        }
+        QString errorMessage;
+        if (!motionControlService.disconnectController(&errorMessage)) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("断开 ACS 控制器失败"),
+                errorMessage);
+        }
+    } else {
+        motionControlService.connectController();
+    }
+}
+
+void DeviceStatusPanel::showMachineModeDialog()
+{
+    MotionControlService& motionControlService =
+        MotionControlService::instance();
+    const MachineMode currentMode = motionControlService.machineMode();
+    const MachineMode targetMode =
+        currentMode == MachineMode::Automatic
+            ? MachineMode::Maintenance
+            : MachineMode::Automatic;
+    const QString targetText =
+        targetMode == MachineMode::Automatic
+            ? QStringLiteral("自动模式")
+            : QStringLiteral("维修模式");
+
+    QMessageBox dialog(this);
+    dialog.setIcon(QMessageBox::Question);
+    dialog.setWindowTitle(QStringLiteral("切换机器模式"));
+    dialog.setText(
+        QStringLiteral("确认切换为%1？").arg(targetText));
+    QAbstractButton* switchButton = dialog.addButton(
+        QStringLiteral("切换"), QMessageBox::AcceptRole);
+    dialog.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
+    dialog.exec();
+    if (dialog.clickedButton() != switchButton) {
+        return;
+    }
+
+    QString errorMessage;
+    if (!motionControlService.setMachineMode(targetMode, &errorMessage)) {
+        QMessageBox::warning(
+            this, QStringLiteral("切换机器模式失败"), errorMessage);
+    }
+}
+
+void DeviceStatusPanel::showForceTareDialog()
+{
+    if (!acsConnected_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法执行力传感器去皮"),
+            QStringLiteral("ACS 控制器未连接。"));
+        return;
+    }
+
+    TestExecutionService& executionService =
+        TestExecutionService::instance();
+    if (executionService.machineState() == MachineState::Running) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法执行力传感器去皮"),
+            QStringLiteral("机器当前处于运行状态，请先停止测试。"));
+        return;
+    }
+    if (forceTarePending_) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("力传感器去皮"),
+            QStringLiteral("去皮请求正在处理中。"));
+        return;
+    }
+
+    QMessageBox dialog(this);
+    dialog.setIcon(QMessageBox::Question);
+    dialog.setWindowTitle(QStringLiteral("力传感器去皮"));
+    dialog.setText(QStringLiteral("确认将当前力传感器值置零？"));
+    QAbstractButton* tareButton = dialog.addButton(
+        QStringLiteral("置零"), QMessageBox::AcceptRole);
+    dialog.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
+    dialog.exec();
+    if (dialog.clickedButton() != tareButton) {
+        return;
+    }
+
+    if (!acsConnected_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法执行力传感器去皮"),
+            QStringLiteral("ACS 控制器连接已断开。"));
+        return;
+    }
+    if (executionService.machineState() == MachineState::Running) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法执行力传感器去皮"),
+            QStringLiteral("机器当前处于运行状态，请先停止测试。"));
+        return;
+    }
+
+    forceTarePending_ = true;
+    MotionControlService::instance().tareForceSensor();
 }
 
 void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
@@ -143,6 +447,87 @@ void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
     machineStateReason_->setText(reason);
 }
 
+void DeviceStatusPanel::updateMachineModeDisplay(MachineMode mode)
+{
+    const bool automatic = mode == MachineMode::Automatic;
+    machineModeButton_->setText(
+        automatic ? QStringLiteral("自动模式") : QStringLiteral("维修模式"));
+    machineModeButton_->setProperty(
+        "buttonStyle", automatic ? QStringLiteral("primary")
+                                 : QStringLiteral("warning"));
+    machineModeButton_->style()->unpolish(machineModeButton_);
+    machineModeButton_->style()->polish(machineModeButton_);
+}
+
+QWidget* DeviceStatusPanel::createPressureValuesCard()
+{
+    auto* card = new QFrame;
+    card->setObjectName(QStringLiteral("sensorValuesCard"));
+    auto* layout = new QGridLayout(card);
+    layout->setContentsMargins(10, 8, 10, 8);
+    layout->setHorizontalSpacing(8);
+    layout->setVerticalSpacing(6);
+
+    for (std::size_t index = 0; index < pressureValueLabels_.size(); ++index) {
+        layout->addWidget(
+            ViewHelpers::makeLabel(
+                QStringLiteral("气压%1").arg(index + 1), "sensorName"),
+            static_cast<int>(index),
+            0);
+        pressureValueLabels_.at(index) =
+            ViewHelpers::makeLabel(QStringLiteral("无效"), "sensorValue");
+        pressureValueLabels_.at(index)->setProperty("valid", false);
+        pressureValueLabels_.at(index)->setAlignment(
+            Qt::AlignRight | Qt::AlignVCenter);
+        layout->addWidget(
+            pressureValueLabels_.at(index), static_cast<int>(index), 1);
+    }
+
+    return card;
+}
+
+QWidget* DeviceStatusPanel::createForceValueCard()
+{
+    auto* card = new QFrame;
+    card->setObjectName(QStringLiteral("sensorValuesCard"));
+    auto* layout = new QHBoxLayout(card);
+    layout->setContentsMargins(10, 8, 10, 8);
+    layout->setSpacing(8);
+    layout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("力传感器"), "sensorName"));
+    layout->addStretch();
+    forceValueLabel_ =
+        ViewHelpers::makeLabel(QStringLiteral("无效"), "sensorValue");
+    forceValueLabel_->setProperty("valid", false);
+    forceValueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    layout->addWidget(forceValueLabel_);
+    return card;
+}
+
+void DeviceStatusPanel::clearSensorReadings()
+{
+    for (QLabel* valueLabel : pressureValueLabels_) {
+        if (valueLabel != nullptr) {
+            setSensorValue(
+                valueLabel, QStringLiteral("无效"), false);
+        }
+    }
+    if (forceValueLabel_ != nullptr) {
+        setSensorValue(
+            forceValueLabel_, QStringLiteral("无效"), false);
+    }
+}
+
+void DeviceStatusPanel::setSensorValue(QLabel* label,
+                                       const QString& text,
+                                       bool valid)
+{
+    label->setText(text);
+    label->setProperty("valid", valid);
+    label->style()->unpolish(label);
+    label->style()->polish(label);
+}
+
 QWidget* DeviceStatusPanel::createStateItem(const QString& name,
                                             const QString& state,
                                             const QString& detail,
@@ -156,6 +541,9 @@ QWidget* DeviceStatusPanel::createStateItem(const QString& name,
     layout->setVerticalSpacing(3);
     layout->addWidget(ViewHelpers::makeLabel(name, "stateName"), 0, 0);
     layout->addWidget(new StatusPill(state, level), 0, 1, Qt::AlignRight);
-    layout->addWidget(ViewHelpers::makeLabel(detail, "stateDetail"), 1, 0, 1, 2);
+    if (!detail.isEmpty()) {
+        layout->addWidget(
+            ViewHelpers::makeLabel(detail, "stateDetail"), 1, 0, 1, 2);
+    }
     return item;
 }

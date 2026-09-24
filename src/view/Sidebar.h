@@ -15,11 +15,6 @@ public:
 
 signals:
     void pageRequested(int index);
-    void messageRequested(const QString& message);
-
-private slots:
-    void onSwitchAccountClicked();
-    void onLockClicked();
 
 private:
     NavigationBar* navigationBar_{};

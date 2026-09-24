@@ -240,16 +240,14 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
 
     auto* controlPanel = ViewHelpers::makePanel(
         QStringLiteral("控制与执行"),
-        QStringLiteral("启动与停止通过 ACS 控制器执行，回零尚未接入"));
+        QStringLiteral("自动模式下启动或停止测试"));
     auto* controlLayout = qobject_cast<QVBoxLayout*>(controlPanel->layout());
     startButton_ = ViewHelpers::makeButton(
         QStringLiteral("启动测试"), QStringLiteral("primary"));
     stopButton_ = ViewHelpers::makeButton(
         QStringLiteral("停止"), QStringLiteral("warning"));
-    homingButton_ = ViewHelpers::makeButton(QStringLiteral("执行回零"));
     controlLayout->addWidget(startButton_);
     controlLayout->addWidget(stopButton_);
-    controlLayout->addWidget(homingButton_);
     controlLayout->addWidget(ViewHelpers::makeDivider());
     controlLayout->addStretch();
 
@@ -353,16 +351,17 @@ void WorkbenchPage::initializeConnections()
             &QPushButton::clicked,
             this,
             &WorkbenchPage::onStopButtonClicked);
-    connect(homingButton_,
-            &QPushButton::clicked,
-            this,
-            &WorkbenchPage::onHomingButtonClicked);
-
     MotionControlService& motionControlService = MotionControlService::instance();
     connect(&motionControlService,
             &MotionControlService::connectionChanged,
             this,
             &WorkbenchPage::setControllerConnected);
+    connect(&motionControlService,
+            &MotionControlService::machineModeChanged,
+            this,
+            [this](MachineMode) {
+                updateControlAvailability();
+            });
     connect(&motionControlService,
             &MotionControlService::motionStatusChanged,
             this,
@@ -527,6 +526,14 @@ bool WorkbenchPage::isConfigurationLocked() const
 
 void WorkbenchPage::onStartButtonClicked()
 {
+    if (MotionControlService::instance().machineMode()
+        != MachineMode::Automatic) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("机器当前处于维修模式，请先切换到自动模式。"));
+        return;
+    }
     const TestExecutionService& executionService =
         TestExecutionService::instance();
     if (executionService.machineState() != MachineState::Idle) {
@@ -583,14 +590,6 @@ void WorkbenchPage::onStopButtonClicked()
 
     setMotionCommandPending(true);
     stopTest();
-}
-
-void WorkbenchPage::onHomingButtonClicked()
-{
-    QMessageBox::information(
-        this,
-        QStringLiteral("执行回零"),
-        QStringLiteral("执行回零尚未接入控制器，未发送设备指令。"));
 }
 
 void WorkbenchPage::setConfiguration(const TestParameters& parameters)
@@ -694,19 +693,26 @@ void WorkbenchPage::updateControlAvailability()
         return;
     }
 
-    startButton_->setEnabled(true);
-    stopButton_->setEnabled(true);
+    const bool automaticMode =
+        MotionControlService::instance().machineMode()
+        == MachineMode::Automatic;
+    startButton_->setEnabled(automaticMode);
+    stopButton_->setEnabled(automaticMode);
 
     const TestExecutionService& executionService =
         TestExecutionService::instance();
     startButton_->setToolTip(
-        executionService.machineState() == MachineState::Idle
-            ? QStringLiteral("开始测试")
-            : QStringLiteral("点击后显示无法开始的原因"));
+        !automaticMode
+            ? QStringLiteral("维修模式下禁止启动自动测试")
+            : (executionService.machineState() == MachineState::Idle
+                   ? QStringLiteral("开始测试")
+                   : QStringLiteral("点击后显示无法开始的原因")));
     stopButton_->setToolTip(
-        executionService.machineState() == MachineState::Running
-            ? QStringLiteral("停止当前测试")
-            : QStringLiteral("点击后显示无法停止的原因"));
+        !automaticMode
+            ? QStringLiteral("维修模式下请在维修界面停止运动")
+            : (executionService.machineState() == MachineState::Running
+                   ? QStringLiteral("停止当前测试")
+                   : QStringLiteral("点击后显示无法停止的原因")));
 }
 
 void WorkbenchPage::appendForcePositionSamples(

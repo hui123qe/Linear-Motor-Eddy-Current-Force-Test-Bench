@@ -20,7 +20,7 @@ QMainWindow, #applicationRoot {
 }
 
 #projectSubtitle, #pageDescription, #panelCaption, #railSubtitle,
-#stateDetail, #metricNote, #accountRole {
+#stateDetail, #metricNote {
     color: #5d7077;
     font-size: 13px;
 }
@@ -65,29 +65,6 @@ QMainWindow, #applicationRoot {
     background: #315c63;
     border: none;
     max-height: 1px;
-}
-
-#accountCard {
-    background: #0d333a;
-    border: 1px solid #315961;
-    border-radius: 8px;
-}
-
-#accountCaption, #accountRole {
-    color: #8eb2b7;
-}
-
-#accountName {
-    color: #ffffff;
-    font-size: 16px;
-    font-weight: 800;
-}
-
-#accountCard QPushButton {
-    color: #d7e8e9;
-    background: #234b53;
-    border-color: #3c6269;
-    padding: 6px 8px;
 }
 
 #pageStack {
@@ -194,6 +171,36 @@ QMainWindow, #applicationRoot {
     background: #f7f9f9;
     border: 1px solid #e0e6e5;
     border-radius: 6px;
+}
+
+#stateItem[interactive="true"]:hover {
+    background: #edf6f5;
+    border-color: #9fc5c1;
+}
+
+#sensorValuesCard {
+    background: #f7f9f9;
+    border: 1px solid #e0e6e5;
+    border-radius: 6px;
+}
+
+#sensorName {
+    color: #20383e;
+    font-weight: 700;
+}
+
+#sensorValue {
+    color: #7a898c;
+    font-weight: 800;
+}
+
+#sensorValue[valid="true"] {
+    color: #167349;
+}
+
+#sensorValuesCard[interactive="true"]:hover {
+    background: #edf6f5;
+    border-color: #9fc5c1;
 }
 
 #stateName {

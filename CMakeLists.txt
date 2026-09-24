@@ -103,6 +103,7 @@ qt_add_executable(EddyCurrentBench
     src/database/AcquisitionDatabaseService.cpp
     src/motion/AcsClient.h
     src/motion/AcsClient.cpp
+    src/motion/AcsVariableNames.h
     src/motion/MotionControlService.h
     src/motion/MotionControlService.cpp
     src/workflow/TestExecutionService.h

@@ -1,5 +1,7 @@
 #include "AcsClient.h"
 
+#include "AcsVariableNames.h"
+
 #include "../logging/AppLogger.h"
 
 #include <ACSC.h>
@@ -23,6 +25,7 @@ constexpr int kMotionConfigurationSchemaVersion = 1;
 constexpr double kMetersToMillimeters = 1000.0;
 constexpr int kMinimumPollIntervalMilliseconds = 10;
 constexpr int kMaximumPollIntervalMilliseconds = 5000;
+constexpr int kSensorPollIntervalMilliseconds = 200;
 constexpr int kErrorBufferSize = 512;
 
 const std::array<const char*, kAcquisitionBlockCount> kCollectionBlockVariables = {
@@ -85,9 +88,13 @@ AcsClient::AcsClient(QObject* parent)
     : QObject(parent)
     , controllerHandle_(ACSC_INVALID)
     , pollTimer_(new QTimer(this))
+    , sensorPollTimer_(new QTimer(this))
 {
     pollTimer_->setSingleShot(false);
     connect(pollTimer_, &QTimer::timeout, this, &AcsClient::pollStatus);
+    sensorPollTimer_->setSingleShot(false);
+    sensorPollTimer_->setInterval(kSensorPollIntervalMilliseconds);
+    connect(sensorPollTimer_, &QTimer::timeout, this, &AcsClient::pollSensors);
 }
 
 AcsClient::~AcsClient()
@@ -112,6 +119,7 @@ void AcsClient::connectController()
 
     pollTimer_->setInterval(pollIntervalMilliseconds_);
     pollTimer_->start();
+    sensorPollTimer_->start();
     qCInfo(logMotion)
         << "ACS SDK 连接成功，mode=" << connectionMode_
         << "axis=" << axis_;
@@ -122,6 +130,7 @@ void AcsClient::connectController()
             : QStringLiteral("ACS 控制器已连接：%1:%2").arg(address_).arg(port_));
 
     pollStatus();
+    pollSensors();
 }
 
 void AcsClient::disconnectController()
@@ -132,6 +141,198 @@ void AcsClient::disconnectController()
         qCInfo(logMotion) << "ACS SDK 连接已关闭";
         emit connectionChanged(false, QStringLiteral("ACS 控制器已断开"));
     }
+}
+
+void AcsClient::tareForceSensor()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        const QString message =
+            QStringLiteral("ACS 控制器未连接，不能执行力传感器去皮。");
+        qCWarning(logMotion).noquote() << message;
+        emit forceTareFailed(message);
+        return;
+    }
+
+    qCInfo(logMotion)
+        << "写入力传感器去皮请求，variable="
+        << AcsVariableNames::forceTareRequest
+        << "value=1";
+    QString errorMessage;
+    if (!writeInteger(
+            AcsVariableNames::forceTareRequest, 1, &errorMessage)) {
+        qCWarning(logMotion).noquote() << errorMessage;
+        emit forceTareFailed(errorMessage);
+        return;
+    }
+
+    emit forceTareWritten();
+}
+
+void AcsClient::enableAxis()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::EnableAxis,
+            QStringLiteral("ACS 控制器未连接，不能执行上使能。"));
+        return;
+    }
+
+    qCInfo(logMotion) << "提交维修命令：上使能，axis=" << axis_;
+    if (acsc_Enable(static_cast<HANDLE>(controllerHandle_),
+                    axis_,
+                    ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS 轴上使能失败"));
+        qCWarning(logMotion).noquote() << message;
+        emit maintenanceCommandFailed(MaintenanceCommand::EnableAxis, message);
+        return;
+    }
+
+    emit maintenanceCommandCompleted(MaintenanceCommand::EnableAxis);
+}
+
+void AcsClient::disableAxis()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::DisableAxis,
+            QStringLiteral("ACS 控制器未连接，不能执行下使能。"));
+        return;
+    }
+
+    qCInfo(logMotion) << "提交维修命令：下使能，axis=" << axis_;
+    if (acsc_Disable(static_cast<HANDLE>(controllerHandle_),
+                     axis_,
+                     ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS 轴下使能失败"));
+        qCWarning(logMotion).noquote() << message;
+        emit maintenanceCommandFailed(MaintenanceCommand::DisableAxis, message);
+        return;
+    }
+
+    emit maintenanceCommandCompleted(MaintenanceCommand::DisableAxis);
+}
+
+void AcsClient::moveToZero(double velocityMillimetersPerSecond)
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::MoveToZero,
+            QStringLiteral("ACS 控制器未连接，不能执行回零。"));
+        return;
+    }
+
+    double zeroPosition = 0.0;
+    QString errorMessage;
+    if (!readReal(AcsVariableNames::zeroPosition,
+                  &zeroPosition,
+                  &errorMessage)) {
+        qCWarning(logMotion).noquote() << errorMessage;
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::MoveToZero, errorMessage);
+        return;
+    }
+
+    qCInfo(logMotion)
+        << "提交维修命令：移动到零点，axis=" << axis_
+        << "targetControllerUnits=" << zeroPosition
+        << "velocityMmPerSecond=" << velocityMillimetersPerSecond;
+    executePointMotion(MaintenanceCommand::MoveToZero,
+                       0,
+                       zeroPosition,
+                       velocityMillimetersPerSecond);
+}
+
+void AcsClient::moveRelative(double distanceMillimeters,
+                             double velocityMillimetersPerSecond)
+{
+    const double distanceControllerUnits =
+        distanceMillimeters * countsPerMillimeter_;
+    qCInfo(logMotion)
+        << "提交维修命令：相对运动，axis=" << axis_
+        << "distanceMm=" << distanceMillimeters
+        << "velocityMmPerSecond=" << velocityMillimetersPerSecond;
+    executePointMotion(MaintenanceCommand::RelativeMove,
+                       ACSC_AMF_RELATIVE,
+                       distanceControllerUnits,
+                       velocityMillimetersPerSecond);
+}
+
+void AcsClient::moveAbsolute(double positionMillimeters,
+                             double velocityMillimetersPerSecond)
+{
+    const double positionControllerUnits =
+        positionMillimeters * countsPerMillimeter_;
+    qCInfo(logMotion)
+        << "提交维修命令：绝对运动，axis=" << axis_
+        << "positionMm=" << positionMillimeters
+        << "velocityMmPerSecond=" << velocityMillimetersPerSecond;
+    executePointMotion(MaintenanceCommand::AbsoluteMove,
+                       0,
+                       positionControllerUnits,
+                       velocityMillimetersPerSecond);
+}
+
+void AcsClient::startJog(double velocityMillimetersPerSecond)
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::StartJog,
+            QStringLiteral("ACS 控制器未连接，不能执行 JOG。"));
+        return;
+    }
+
+    QString errorMessage;
+    if (!configureMaintenanceMotion(
+            std::abs(velocityMillimetersPerSecond), &errorMessage)) {
+        qCWarning(logMotion).noquote() << errorMessage;
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::StartJog, errorMessage);
+        return;
+    }
+
+    const double velocityControllerUnits =
+        velocityMillimetersPerSecond * countsPerMillimeter_;
+    qCInfo(logMotion)
+        << "提交维修命令：JOG，axis=" << axis_
+        << "velocityMmPerSecond=" << velocityMillimetersPerSecond;
+    if (acsc_Jog(static_cast<HANDLE>(controllerHandle_),
+                 0,
+                 axis_,
+                 velocityControllerUnits,
+                 ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS JOG 启动失败"));
+        qCWarning(logMotion).noquote() << message;
+        emit maintenanceCommandFailed(MaintenanceCommand::StartJog, message);
+        return;
+    }
+
+    emit maintenanceCommandCompleted(MaintenanceCommand::StartJog);
+}
+
+void AcsClient::haltAxis()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            MaintenanceCommand::Halt,
+            QStringLiteral("ACS 控制器未连接，不能停止维修运动。"));
+        return;
+    }
+
+    qCInfo(logMotion) << "提交维修命令：HALT，axis=" << axis_;
+    if (acsc_Halt(static_cast<HANDLE>(controllerHandle_),
+                  axis_,
+                  ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS HALT 失败"));
+        qCWarning(logMotion).noquote() << message;
+        emit maintenanceCommandFailed(MaintenanceCommand::Halt, message);
+        return;
+    }
+
+    emit maintenanceCommandCompleted(MaintenanceCommand::Halt);
 }
 
 void AcsClient::start(const MotionStartRequest& request)
@@ -573,7 +774,65 @@ void AcsClient::pollStatus()
         return;
     }
 
+    int motorState = 0;
+    double feedbackPosition = 0.0;
+    double feedbackVelocity = 0.0;
+    if (acsc_GetMotorState(static_cast<HANDLE>(controllerHandle_),
+                           axis_,
+                           &motorState,
+                           ACSC_SYNCHRONOUS)
+            == 0
+        || acsc_GetFPosition(static_cast<HANDLE>(controllerHandle_),
+                             axis_,
+                             &feedbackPosition,
+                             ACSC_SYNCHRONOUS)
+               == 0
+        || acsc_GetFVelocity(static_cast<HANDLE>(controllerHandle_),
+                             axis_,
+                             &feedbackVelocity,
+                             ACSC_SYNCHRONOUS)
+               == 0) {
+        handleCommunicationFailure(
+            sdkError(QStringLiteral("读取 ACS 轴状态失败")));
+        return;
+    }
+
+    status.axisEnabled = (motorState & ACSC_MST_ENABLE) != 0;
+    status.axisMoving = (motorState & ACSC_MST_MOVE) != 0;
+    status.feedbackPositionMillimeters =
+        feedbackPosition / countsPerMillimeter_;
+    status.feedbackVelocityMillimetersPerSecond =
+        feedbackVelocity / countsPerMillimeter_;
+
     emit statusChanged(status);
+}
+
+void AcsClient::pollSensors()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        return;
+    }
+
+    AcsSensorReadings readings;
+    QString errorMessage;
+    for (std::size_t index = 0;
+         index < AcsVariableNames::pressureValues.size();
+         ++index) {
+        if (!readReal(AcsVariableNames::pressureValues.at(index),
+                      &readings.pressureValues.at(index),
+                      &errorMessage)) {
+            qCWarning(logMotion).noquote() << errorMessage;
+            return;
+        }
+    }
+    if (!readReal(AcsVariableNames::forceValue,
+                  &readings.forceValue,
+                  &errorMessage)) {
+        qCWarning(logMotion).noquote() << errorMessage;
+        return;
+    }
+
+    emit sensorReadingsChanged(readings);
 }
 
 bool AcsClient::loadConfiguration(QString* errorMessage)
@@ -660,12 +919,122 @@ bool AcsClient::openConnection(QString* errorMessage)
 void AcsClient::closeConnection()
 {
     pollTimer_->stop();
+    sensorPollTimer_->stop();
     if (controllerHandle_ == ACSC_INVALID) {
         return;
     }
 
     acsc_CloseComm(static_cast<HANDLE>(controllerHandle_));
     controllerHandle_ = ACSC_INVALID;
+}
+
+bool AcsClient::configureMaintenanceMotion(
+    double velocityMillimetersPerSecond,
+    QString* errorMessage)
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        setError(errorMessage, QStringLiteral("ACS 控制器未连接。"));
+        return false;
+    }
+    if (!std::isfinite(velocityMillimetersPerSecond)
+        || velocityMillimetersPerSecond <= 0.0
+        || !std::isfinite(countsPerMillimeter_)
+        || countsPerMillimeter_ <= 0.0) {
+        setError(errorMessage, QStringLiteral("维修运动速度或单位换算参数无效。"));
+        return false;
+    }
+
+    double acceleration = 0.0;
+    double deceleration = 0.0;
+    double jerk = 0.0;
+    if (!readReal(AcsVariableNames::positioningAcceleration,
+                  &acceleration,
+                  errorMessage)
+        || !readReal(AcsVariableNames::positioningDeceleration,
+                     &deceleration,
+                     errorMessage)
+        || !readReal(AcsVariableNames::positioningJerk,
+                     &jerk,
+                     errorMessage)) {
+        return false;
+    }
+    if (!std::isfinite(acceleration) || acceleration <= 0.0
+        || !std::isfinite(deceleration) || deceleration <= 0.0
+        || !std::isfinite(jerk) || jerk <= 0.0) {
+        setError(
+            errorMessage,
+            QStringLiteral("ACS 维修运动加速度、减速度或 Jerk 参数无效。"));
+        return false;
+    }
+
+    const double velocityControllerUnits =
+        velocityMillimetersPerSecond * countsPerMillimeter_;
+    if (acsc_SetVelocity(static_cast<HANDLE>(controllerHandle_),
+                         axis_,
+                         velocityControllerUnits,
+                         ACSC_SYNCHRONOUS)
+            == 0
+        || acsc_SetAcceleration(static_cast<HANDLE>(controllerHandle_),
+                                axis_,
+                                acceleration,
+                                ACSC_SYNCHRONOUS)
+               == 0
+        || acsc_SetDeceleration(static_cast<HANDLE>(controllerHandle_),
+                                axis_,
+                                deceleration,
+                                ACSC_SYNCHRONOUS)
+               == 0
+        || acsc_SetJerk(static_cast<HANDLE>(controllerHandle_),
+                        axis_,
+                        jerk,
+                        ACSC_SYNCHRONOUS)
+               == 0) {
+        setError(
+            errorMessage,
+            sdkError(QStringLiteral("设置 ACS 维修运动参数失败")));
+        return false;
+    }
+
+    return true;
+}
+
+void AcsClient::executePointMotion(
+    MaintenanceCommand command,
+    int flags,
+    double pointControllerUnits,
+    double velocityMillimetersPerSecond)
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit maintenanceCommandFailed(
+            command, QStringLiteral("ACS 控制器未连接，不能执行 PTP 运动。"));
+        return;
+    }
+    if (!std::isfinite(pointControllerUnits)) {
+        emit maintenanceCommandFailed(
+            command, QStringLiteral("维修运动目标位置无效。"));
+        return;
+    }
+
+    QString errorMessage;
+    if (!configureMaintenanceMotion(
+            velocityMillimetersPerSecond, &errorMessage)) {
+        qCWarning(logMotion).noquote() << errorMessage;
+        emit maintenanceCommandFailed(command, errorMessage);
+        return;
+    }
+    if (acsc_ToPoint(static_cast<HANDLE>(controllerHandle_),
+                     flags,
+                     axis_,
+                     pointControllerUnits,
+                     ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS PTP 运动启动失败"));
+        qCWarning(logMotion).noquote() << message;
+        emit maintenanceCommandFailed(command, message);
+        return;
+    }
+
+    emit maintenanceCommandCompleted(command);
 }
 
 bool AcsClient::readInteger(const char* variable,
@@ -682,6 +1051,31 @@ bool AcsClient::readInteger(const char* variable,
                          0,
                          value,
                          ACSC_SYNCHRONOUS)
+        != 0) {
+        return true;
+    }
+
+    setError(
+        errorMessage,
+        sdkError(QStringLiteral("读取 ACS 变量 %1 失败")
+                     .arg(QString::fromLatin1(variable))));
+    return false;
+}
+
+bool AcsClient::readReal(const char* variable,
+                         double* value,
+                         QString* errorMessage) const
+{
+    char* variableName = const_cast<char*>(variable);
+    if (acsc_ReadReal(static_cast<HANDLE>(controllerHandle_),
+                      ACSC_NONE,
+                      variableName,
+                      0,
+                      0,
+                      0,
+                      0,
+                      value,
+                      ACSC_SYNCHRONOUS)
         != 0) {
         return true;
     }

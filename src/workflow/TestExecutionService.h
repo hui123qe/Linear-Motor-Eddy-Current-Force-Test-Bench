@@ -81,6 +81,7 @@ private:
     QString terminalReason_;
     int currentRepetitionIndex_ = 0;
     int motionState_ = 0;
+    bool axisMoving_ = false;
     int completedMotionCount_ = 0;
     int finalizedRecordCount_ = 0;
     qint64 currentRawSampleCount_ = 0;

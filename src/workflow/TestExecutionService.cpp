@@ -101,6 +101,12 @@ TestExecutionService::TestExecutionService()
                 controllerStatusMessage_ = message;
                 updateMachineState();
             });
+    connect(&motionService,
+            &MotionControlService::machineModeChanged,
+            this,
+            [this](MachineMode) {
+                updateMachineState();
+            });
     connect(&acquisitionService,
             &DataAcquisitionService::readinessChanged,
             this,
@@ -204,6 +210,11 @@ void TestExecutionService::shutdown()
 bool TestExecutionService::start(const TestParameters& parameters,
                                  QString* errorMessage)
 {
+    if (MotionControlService::instance().machineMode()
+        != MachineMode::Automatic) {
+        setError(errorMessage, QStringLiteral("机器当前处于维修模式，不能启动自动测试。"));
+        return false;
+    }
     updateMachineState();
     if (machineState_ != MachineState::Idle) {
         setError(
@@ -336,6 +347,7 @@ void TestExecutionService::handleMotionStatusChanged(
 {
     const int previousMotionState = motionState_;
     motionState_ = status.state;
+    axisMoving_ = status.axisMoving;
     completedMotionCount_ = status.currentCount;
     updateMachineState();
 
@@ -695,6 +707,26 @@ void TestExecutionService::updateMachineState()
                 : controllerStatusMessage_);
         return;
     }
+    const MachineMode machineMode =
+        MotionControlService::instance().machineMode();
+    if (isFaultMotionState(motionState_)) {
+        setMachineState(
+            MachineState::Error,
+            QStringLiteral("运动控制器进入故障状态 %1").arg(motionState_));
+        return;
+    }
+    if (machineMode == MachineMode::Maintenance) {
+        if (currentRepetitionIndex_ != 0
+            || isActiveMotionState(motionState_)
+            || axisMoving_) {
+            setMachineState(
+                MachineState::Running,
+                QStringLiteral("维修运动正在运行"));
+            return;
+        }
+        setMachineState(MachineState::Idle, QStringLiteral("维修模式已就绪"));
+        return;
+    }
     if (!acquisitionReady_) {
         setMachineState(
             MachineState::Error,
@@ -711,14 +743,12 @@ void TestExecutionService::updateMachineState()
                 : databaseStatusMessage_);
         return;
     }
-    if (isFaultMotionState(motionState_)) {
-        setMachineState(
-            MachineState::Error,
-            QStringLiteral("运动控制器进入故障状态 %1").arg(motionState_));
-        return;
-    }
     if (currentRepetitionIndex_ != 0 || isActiveMotionState(motionState_)) {
         setMachineState(MachineState::Running, QStringLiteral("测试正在运行"));
+        return;
+    }
+    if (axisMoving_) {
+        setMachineState(MachineState::Running, QStringLiteral("轴正在运动"));
         return;
     }
 

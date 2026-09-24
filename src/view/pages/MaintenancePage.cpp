@@ -1,27 +1,27 @@
 #include "MaintenancePage.h"
 
+#include "../../motion/MotionControlService.h"
 #include "../widgets/MetricCard.h"
 #include "../widgets/StatusPill.h"
 #include "../widgets/ViewHelpers.h"
 
+#include <QApplication>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QFrame>
-#include <QGridLayout>
+#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
 namespace {
 
-constexpr double kPtpMaxSpeed = 50.0;
-constexpr double kJogSpeed = 30.0;
-
 QDoubleSpinBox* makePositionInput(double value)
 {
     auto* input = new QDoubleSpinBox;
-    input->setRange(-100000.0, 100000.0);
+    input->setRange(-1.0e12, 1.0e12);
     input->setDecimals(3);
     input->setSingleStep(1.0);
     input->setValue(value);
@@ -38,17 +38,47 @@ QFrame* makeLimitBox()
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(7);
-    layout->addWidget(ViewHelpers::makeLabel(QStringLiteral("维护模式约束"), "constraintTitle"));
-    layout->addWidget(ViewHelpers::makeLabel(QStringLiteral("- PTP 相对/绝对运动最大速度固定为 50 mm/s"), "constraintText"));
-    layout->addWidget(ViewHelpers::makeLabel(QStringLiteral("- JOG 运动速度固定为 30 mm/s"), "constraintText"));
-    layout->addWidget(ViewHelpers::makeLabel(QStringLiteral("- 本页面仅提供维护操作入口，真实下发必须经过控制模块和联锁校验"), "constraintText"));
+    layout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("维修模式约束"), "constraintTitle"));
+    layout->addWidget(ViewHelpers::makeLabel(
+        QStringLiteral("- PTP 速度固定为 50 mm/s，JOG 速度固定为 30 mm/s"),
+        "constraintText"));
+    layout->addWidget(ViewHelpers::makeLabel(
+        QStringLiteral("- 当前未配置软件位置限位，运动前必须确认机械行程安全"),
+        "constraintText"));
+    layout->addWidget(ViewHelpers::makeLabel(
+        QStringLiteral("- JOG 按下启动、松开停止；页面隐藏或应用失焦也会发送 HALT"),
+        "constraintText"));
     return box;
+}
+
+QString maintenanceCommandText(MaintenanceCommand command)
+{
+    switch (command) {
+    case MaintenanceCommand::EnableAxis:
+        return QStringLiteral("上使能");
+    case MaintenanceCommand::DisableAxis:
+        return QStringLiteral("下使能");
+    case MaintenanceCommand::MoveToZero:
+        return QStringLiteral("移动到零点");
+    case MaintenanceCommand::RelativeMove:
+        return QStringLiteral("相对运动");
+    case MaintenanceCommand::AbsoluteMove:
+        return QStringLiteral("绝对运动");
+    case MaintenanceCommand::StartJog:
+        return QStringLiteral("JOG");
+    case MaintenanceCommand::Halt:
+        return QStringLiteral("停止运动");
+    }
+
+    return QStringLiteral("维修命令");
 }
 
 } // namespace
 
 MaintenancePage::MaintenancePage(QWidget* parent)
     : QWidget(parent)
+    , machineMode_(MotionControlService::instance().machineMode())
 {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(18, 14, 18, 14);
@@ -57,13 +87,14 @@ MaintenancePage::MaintenancePage(QWidget* parent)
     auto* heading = new QHBoxLayout;
     auto* titleBox = new QVBoxLayout;
     titleBox->setSpacing(1);
-    titleBox->addWidget(ViewHelpers::makeLabel(QStringLiteral("维护界面"), "pageTitle"));
+    titleBox->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("维修界面"), "pageTitle"));
     titleBox->addWidget(ViewHelpers::makeLabel(
-        QStringLiteral("龙门轴维护操作入口，所有动作仅做界面模拟提示"),
-        "pageDescription"));
+        QStringLiteral("维修模式下直接控制 ACS 轴"), "pageDescription"));
     heading->addLayout(titleBox);
     heading->addStretch();
-    heading->addWidget(new StatusPill(QStringLiteral("维护模式"), QStringLiteral("warning"), this));
+    heading->addWidget(new StatusPill(
+        QStringLiteral("实际控制"), QStringLiteral("warning"), this));
     layout->addLayout(heading);
 
     auto* statusBar = new QFrame;
@@ -71,63 +102,98 @@ MaintenancePage::MaintenancePage(QWidget* parent)
     auto* statusLayout = new QHBoxLayout(statusBar);
     statusLayout->setContentsMargins(14, 10, 14, 10);
     statusLayout->setSpacing(12);
-    statusLayout->addWidget(new MetricCard(QStringLiteral("连接状态"), QStringLiteral("未连接")));
-    statusLayout->addWidget(new MetricCard(QStringLiteral("使能状态"), QStringLiteral("下使能")));
-    statusLayout->addWidget(new MetricCard(QStringLiteral("当前位置"), QStringLiteral("-- mm")));
-    statusLayout->addWidget(new MetricCard(QStringLiteral("速度限制"), QStringLiteral("PTP 50 / JOG 30")));
+    connectionCard_ = new MetricCard(
+        QStringLiteral("连接状态"), QStringLiteral("未连接"));
+    enableCard_ = new MetricCard(
+        QStringLiteral("使能状态"), QStringLiteral("无效"));
+    positionCard_ = new MetricCard(
+        QStringLiteral("当前位置"), QStringLiteral("无效"));
+    modeCard_ = new MetricCard(
+        QStringLiteral("机器模式"),
+        machineMode_ == MachineMode::Automatic
+            ? QStringLiteral("自动")
+            : QStringLiteral("维修"));
+    statusLayout->addWidget(connectionCard_);
+    statusLayout->addWidget(enableCard_);
+    statusLayout->addWidget(positionCard_);
+    statusLayout->addWidget(modeCard_);
     layout->addWidget(statusBar);
 
     auto* content = new QHBoxLayout;
     content->setSpacing(12);
 
-    auto* connectionPanel = ViewHelpers::makePanel(QStringLiteral("连接与使能"), QStringLiteral("仅发出维护意图，不直接操作硬件"));
-    auto* connectionLayout = qobject_cast<QVBoxLayout*>(connectionPanel->layout());
-    auto* connectButton = ViewHelpers::makeButton(QStringLiteral("连接"), QStringLiteral("primary"));
-    auto* disconnectButton = ViewHelpers::makeButton(QStringLiteral("断开连接"));
-    auto* enableButton = ViewHelpers::makeButton(QStringLiteral("上使能"), QStringLiteral("primary"));
-    auto* disableButton = ViewHelpers::makeButton(QStringLiteral("下使能"), QStringLiteral("warning"));
-    connectionLayout->addWidget(connectButton);
-    connectionLayout->addWidget(disconnectButton);
+    auto* connectionPanel = ViewHelpers::makePanel(
+        QStringLiteral("连接与使能"),
+        QStringLiteral("连接、轴使能与维修运动停止"));
+    auto* connectionLayout =
+        qobject_cast<QVBoxLayout*>(connectionPanel->layout());
+    connectButton_ = ViewHelpers::makeButton(
+        QStringLiteral("连接"), QStringLiteral("primary"));
+    disconnectButton_ = ViewHelpers::makeButton(QStringLiteral("断开连接"));
+    enableButton_ = ViewHelpers::makeButton(
+        QStringLiteral("上使能"), QStringLiteral("primary"));
+    disableButton_ = ViewHelpers::makeButton(
+        QStringLiteral("下使能"), QStringLiteral("warning"));
+    haltButton_ = ViewHelpers::makeButton(
+        QStringLiteral("停止运动"), QStringLiteral("warning"));
+    connectionLayout->addWidget(connectButton_);
+    connectionLayout->addWidget(disconnectButton_);
     connectionLayout->addWidget(ViewHelpers::makeDivider());
-    connectionLayout->addWidget(enableButton);
-    connectionLayout->addWidget(disableButton);
+    connectionLayout->addWidget(enableButton_);
+    connectionLayout->addWidget(disableButton_);
+    connectionLayout->addWidget(haltButton_);
     connectionLayout->addStretch();
     content->addWidget(connectionPanel, 1);
 
-    auto* ptpPanel = ViewHelpers::makePanel(QStringLiteral("PTP 运动"), QStringLiteral("相对/绝对运动最大速度 50 mm/s"));
+    auto* ptpPanel = ViewHelpers::makePanel(
+        QStringLiteral("PTP 运动"),
+        QStringLiteral("速度固定为 50 mm/s，不配置软件位置限位"));
     auto* ptpLayout = qobject_cast<QVBoxLayout*>(ptpPanel->layout());
+    moveToZeroButton_ = ViewHelpers::makeButton(
+        QStringLiteral("移动到零点"), QStringLiteral("primary"));
+    ptpLayout->addWidget(moveToZeroButton_);
+    ptpLayout->addWidget(ViewHelpers::makeDivider());
+
     auto* relativeForm = new QFormLayout;
     relativeForm->setHorizontalSpacing(20);
     relativeForm->setVerticalSpacing(12);
-    auto* relativeDistance = makePositionInput(10.0);
-    relativeForm->addRow(QStringLiteral("相对位移"), relativeDistance);
+    relativeDistanceInput_ = makePositionInput(10.0);
+    relativeForm->addRow(QStringLiteral("相对位移"), relativeDistanceInput_);
     ptpLayout->addLayout(relativeForm);
-    auto* relativeMove = ViewHelpers::makeButton(QStringLiteral("执行相对运动"), QStringLiteral("primary"));
-    ptpLayout->addWidget(relativeMove);
+    relativeMoveButton_ = ViewHelpers::makeButton(
+        QStringLiteral("执行相对运动"), QStringLiteral("primary"));
+    ptpLayout->addWidget(relativeMoveButton_);
     ptpLayout->addWidget(ViewHelpers::makeDivider());
 
     auto* absoluteForm = new QFormLayout;
     absoluteForm->setHorizontalSpacing(20);
     absoluteForm->setVerticalSpacing(12);
-    auto* absolutePosition = makePositionInput(0.0);
-    absoluteForm->addRow(QStringLiteral("目标位置"), absolutePosition);
+    absolutePositionInput_ = makePositionInput(0.0);
+    absoluteForm->addRow(QStringLiteral("目标位置"), absolutePositionInput_);
     ptpLayout->addLayout(absoluteForm);
-    auto* absoluteMove = ViewHelpers::makeButton(QStringLiteral("执行绝对运动"), QStringLiteral("primary"));
-    ptpLayout->addWidget(absoluteMove);
+    absoluteMoveButton_ = ViewHelpers::makeButton(
+        QStringLiteral("执行绝对运动"), QStringLiteral("primary"));
+    ptpLayout->addWidget(absoluteMoveButton_);
     ptpLayout->addStretch();
     content->addWidget(ptpPanel, 2);
 
-    auto* jogPanel = ViewHelpers::makePanel(QStringLiteral("JOG 运动"), QStringLiteral("JOG 速度固定为 30 mm/s"));
+    auto* jogPanel = ViewHelpers::makePanel(
+        QStringLiteral("JOG 运动"),
+        QStringLiteral("按住运动，松开停止"));
     auto* jogLayout = qobject_cast<QVBoxLayout*>(jogPanel->layout());
-    auto* jogSpeedCard = new MetricCard(QStringLiteral("JOG 速度"), QStringLiteral("30 mm/s"));
-    jogLayout->addWidget(jogSpeedCard);
+    jogLayout->addWidget(new MetricCard(
+        QStringLiteral("JOG 速度"), QStringLiteral("30 mm/s")));
     auto* jogButtons = new QHBoxLayout;
-    auto* jogNegative = ViewHelpers::makeButton(QStringLiteral("JOG-"), QStringLiteral("warning"));
-    auto* jogPositive = ViewHelpers::makeButton(QStringLiteral("JOG+"), QStringLiteral("primary"));
-    jogButtons->addWidget(jogNegative);
-    jogButtons->addWidget(jogPositive);
+    jogNegativeButton_ = ViewHelpers::makeButton(
+        QStringLiteral("JOG-"), QStringLiteral("warning"));
+    jogPositiveButton_ = ViewHelpers::makeButton(
+        QStringLiteral("JOG+"), QStringLiteral("primary"));
+    jogButtons->addWidget(jogNegativeButton_);
+    jogButtons->addWidget(jogPositiveButton_);
     jogLayout->addLayout(jogButtons);
-    auto* jogHint = ViewHelpers::makeLabel(QStringLiteral("按住持续运动，松开应停止；真实逻辑需由控制层实现。"), "constraintText");
+    auto* jogHint = ViewHelpers::makeLabel(
+        QStringLiteral("按下后持续运动，任一 JOG 按钮松开即发送 HALT。"),
+        "constraintText");
     jogHint->setWordWrap(true);
     jogLayout->addWidget(jogHint);
     jogLayout->addStretch();
@@ -136,82 +202,315 @@ MaintenancePage::MaintenancePage(QWidget* parent)
     layout->addLayout(content, 1);
     layout->addWidget(makeLimitBox());
 
-    connect(connectButton,
+    connect(connectButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onConnectButtonClicked);
-    connect(disconnectButton,
+    connect(disconnectButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onDisconnectButtonClicked);
-    connect(enableButton,
+    connect(enableButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onEnableButtonClicked);
-    connect(disableButton,
+    connect(disableButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onDisableButtonClicked);
-    connect(relativeMove,
+    connect(haltButton_,
+            &QPushButton::clicked,
+            this,
+            &MaintenancePage::onHaltButtonClicked);
+    connect(moveToZeroButton_,
+            &QPushButton::clicked,
+            this,
+            &MaintenancePage::onMoveToZeroClicked);
+    connect(relativeMoveButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onRelativeMoveClicked);
-    connect(absoluteMove,
+    connect(absoluteMoveButton_,
             &QPushButton::clicked,
             this,
             &MaintenancePage::onAbsoluteMoveClicked);
-    connect(jogNegative,
+    connect(jogNegativeButton_,
             &QPushButton::pressed,
             this,
             &MaintenancePage::onJogNegativePressed);
-    connect(jogPositive,
+    connect(jogPositiveButton_,
             &QPushButton::pressed,
             this,
             &MaintenancePage::onJogPositivePressed);
+    connect(jogNegativeButton_,
+            &QPushButton::released,
+            this,
+            &MaintenancePage::onJogReleased);
+    connect(jogPositiveButton_,
+            &QPushButton::released,
+            this,
+            &MaintenancePage::onJogReleased);
+
+    MotionControlService& motionService = MotionControlService::instance();
+    connect(&motionService,
+            &MotionControlService::connectionChanged,
+            this,
+            &MaintenancePage::setControllerConnected);
+    connect(&motionService,
+            &MotionControlService::machineModeChanged,
+            this,
+            &MaintenancePage::setMachineMode);
+    connect(&motionService,
+            &MotionControlService::motionStatusChanged,
+            this,
+            &MaintenancePage::setMotionStatus);
+    connect(&motionService,
+            &MotionControlService::maintenanceCommandCompleted,
+            this,
+            &MaintenancePage::handleMaintenanceCommandCompleted);
+    connect(&motionService,
+            &MotionControlService::maintenanceCommandFailed,
+            this,
+            &MaintenancePage::handleMaintenanceCommandFailed);
+    connect(qApp,
+            &QGuiApplication::applicationStateChanged,
+            this,
+            [this](Qt::ApplicationState state) {
+                if (state != Qt::ApplicationActive) {
+                    stopJog(false);
+                }
+            });
+
+    updateControlAvailability();
+}
+
+void MaintenancePage::hideEvent(QHideEvent* event)
+{
+    if (machineMode_ == MachineMode::Maintenance
+        && (axisMoving_ || jogCommandActive_)) {
+        QString ignoredError;
+        static_cast<void>(MotionControlService::instance().haltMaintenanceMotion(&ignoredError));
+        jogCommandActive_ = false;
+    }
+    QWidget::hideEvent(event);
 }
 
 void MaintenancePage::onConnectButtonClicked()
 {
-    emitActionMessage(QStringLiteral("连接龙门轴"));
+    MotionControlService::instance().connectController();
 }
 
 void MaintenancePage::onDisconnectButtonClicked()
 {
-    emitActionMessage(QStringLiteral("断开龙门轴连接"));
+    QString errorMessage;
+    if (!MotionControlService::instance().disconnectController(&errorMessage)) {
+        showCommandFailure(QStringLiteral("断开连接失败"), errorMessage);
+    }
 }
 
 void MaintenancePage::onEnableButtonClicked()
 {
-    emitActionMessage(QStringLiteral("龙门轴上使能"));
+    QString errorMessage;
+    if (!MotionControlService::instance().enableAxis(&errorMessage)) {
+        showCommandFailure(QStringLiteral("上使能失败"), errorMessage);
+    }
 }
 
 void MaintenancePage::onDisableButtonClicked()
 {
-    emitActionMessage(QStringLiteral("龙门轴下使能"));
+    QString errorMessage;
+    if (!MotionControlService::instance().disableAxis(&errorMessage)) {
+        showCommandFailure(QStringLiteral("下使能失败"), errorMessage);
+    }
+}
+
+void MaintenancePage::onHaltButtonClicked()
+{
+    QString errorMessage;
+    if (!MotionControlService::instance().haltMaintenanceMotion(&errorMessage)) {
+        showCommandFailure(QStringLiteral("停止维修运动失败"), errorMessage);
+        return;
+    }
+    jogCommandActive_ = false;
+    updateControlAvailability();
+}
+
+void MaintenancePage::onMoveToZeroClicked()
+{
+    QString errorMessage;
+    if (!MotionControlService::instance().moveToZero(&errorMessage)) {
+        showCommandFailure(QStringLiteral("移动到零点失败"), errorMessage);
+    }
 }
 
 void MaintenancePage::onRelativeMoveClicked()
 {
-    emitActionMessage(QStringLiteral("执行相对运动"));
+    QString errorMessage;
+    if (!MotionControlService::instance().moveRelative(
+            relativeDistanceInput_->value(), &errorMessage)) {
+        showCommandFailure(QStringLiteral("相对运动失败"), errorMessage);
+    }
 }
 
 void MaintenancePage::onAbsoluteMoveClicked()
 {
-    emitActionMessage(QStringLiteral("执行绝对运动"));
+    QString errorMessage;
+    if (!MotionControlService::instance().moveAbsolute(
+            absolutePositionInput_->value(), &errorMessage)) {
+        showCommandFailure(QStringLiteral("绝对运动失败"), errorMessage);
+    }
 }
 
 void MaintenancePage::onJogNegativePressed()
 {
-    emitActionMessage(QStringLiteral("JOG-"));
+    if (jogCommandActive_) {
+        return;
+    }
+
+    QString errorMessage;
+    if (!MotionControlService::instance().startJog(-1, &errorMessage)) {
+        showCommandFailure(QStringLiteral("JOG- 启动失败"), errorMessage);
+        return;
+    }
+    jogCommandActive_ = true;
+    updateControlAvailability();
 }
 
 void MaintenancePage::onJogPositivePressed()
 {
-    emitActionMessage(QStringLiteral("JOG+"));
+    if (jogCommandActive_) {
+        return;
+    }
+
+    QString errorMessage;
+    if (!MotionControlService::instance().startJog(1, &errorMessage)) {
+        showCommandFailure(QStringLiteral("JOG+ 启动失败"), errorMessage);
+        return;
+    }
+    jogCommandActive_ = true;
+    updateControlAvailability();
 }
 
-void MaintenancePage::emitActionMessage(const QString& action)
+void MaintenancePage::onJogReleased()
 {
-    emit messageRequested(
-        action + QStringLiteral("（维护界面模拟，未下发设备指令）"));
+    stopJog(true);
+}
+
+void MaintenancePage::setControllerConnected(bool connected, const QString&)
+{
+    controllerConnected_ = connected;
+    connectionCard_->setValue(
+        connected ? QStringLiteral("已连接") : QStringLiteral("未连接"));
+    if (!connected) {
+        axisEnabled_ = false;
+        axisMoving_ = false;
+        jogCommandActive_ = false;
+        enableCard_->setValue(QStringLiteral("无效"));
+        positionCard_->setValue(QStringLiteral("无效"));
+    }
+    updateControlAvailability();
+}
+
+void MaintenancePage::setMachineMode(MachineMode mode)
+{
+    machineMode_ = mode;
+    modeCard_->setValue(
+        mode == MachineMode::Automatic
+            ? QStringLiteral("自动")
+            : QStringLiteral("维修"));
+    if (mode != MachineMode::Maintenance) {
+        stopJog(false);
+    }
+    updateControlAvailability();
+}
+
+void MaintenancePage::setMotionStatus(const AcsMotionStatus& status)
+{
+    motionState_ = status.state;
+    axisEnabled_ = status.axisEnabled;
+    axisMoving_ = status.axisMoving;
+    if (controllerConnected_) {
+        enableCard_->setValue(
+            axisEnabled_ ? QStringLiteral("上使能") : QStringLiteral("下使能"));
+        positionCard_->setValue(
+            QStringLiteral("%1 mm")
+                .arg(status.feedbackPositionMillimeters, 0, 'f', 3));
+    }
+    updateControlAvailability();
+}
+
+void MaintenancePage::handleMaintenanceCommandCompleted(
+    MaintenanceCommand command)
+{
+    if (command == MaintenanceCommand::Halt) {
+        jogCommandActive_ = false;
+    }
+    updateControlAvailability();
+}
+
+void MaintenancePage::handleMaintenanceCommandFailed(
+    MaintenanceCommand command,
+    const QString& message)
+{
+    if (command == MaintenanceCommand::StartJog
+        || command == MaintenanceCommand::Halt) {
+        jogCommandActive_ = false;
+    }
+    updateControlAvailability();
+    showCommandFailure(
+        QStringLiteral("%1失败").arg(maintenanceCommandText(command)),
+        message);
+}
+
+void MaintenancePage::stopJog(bool showFailure)
+{
+    if (!jogCommandActive_) {
+        return;
+    }
+    if (!controllerConnected_) {
+        jogCommandActive_ = false;
+        updateControlAvailability();
+        return;
+    }
+
+    QString errorMessage;
+    if (!MotionControlService::instance().haltMaintenanceMotion(&errorMessage)
+        && showFailure) {
+        showCommandFailure(QStringLiteral("停止维修运动失败"), errorMessage);
+    }
+    jogCommandActive_ = false;
+    updateControlAvailability();
+}
+
+void MaintenancePage::updateControlAvailability()
+{
+    const bool maintenanceReady =
+        controllerConnected_
+        && machineMode_ == MachineMode::Maintenance
+        && motionState_ == 0;
+    const bool stationary = !axisMoving_ && !jogCommandActive_;
+    const bool motionReady = maintenanceReady && axisEnabled_ && stationary;
+
+    connectButton_->setEnabled(!controllerConnected_);
+    disconnectButton_->setEnabled(
+        controllerConnected_ && motionState_ == 0 && stationary);
+    enableButton_->setEnabled(
+        maintenanceReady && !axisEnabled_ && stationary);
+    disableButton_->setEnabled(
+        maintenanceReady && axisEnabled_ && stationary);
+    haltButton_->setEnabled(
+        controllerConnected_ && (axisMoving_ || jogCommandActive_));
+    moveToZeroButton_->setEnabled(motionReady);
+    relativeDistanceInput_->setEnabled(motionReady);
+    relativeMoveButton_->setEnabled(motionReady);
+    absolutePositionInput_->setEnabled(motionReady);
+    absoluteMoveButton_->setEnabled(motionReady);
+    jogNegativeButton_->setEnabled(motionReady);
+    jogPositiveButton_->setEnabled(motionReady);
+}
+
+void MaintenancePage::showCommandFailure(const QString& title,
+                                         const QString& message)
+{
+    QMessageBox::warning(this, title, message);
 }

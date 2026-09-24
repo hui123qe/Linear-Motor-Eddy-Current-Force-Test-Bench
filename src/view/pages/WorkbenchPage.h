@@ -43,7 +43,6 @@ public slots:
 private slots:
     void onStartButtonClicked();
     void onStopButtonClicked();
-    void onHomingButtonClicked();
     void beginChartCollection();
     void commitChartCollection();
 
@@ -74,7 +73,6 @@ private:
     QLabel* currentStateValue_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
-    QPushButton* homingButton_ = nullptr;
     bool configurationLocked_ = false;
     bool controllerConnected_ = false;
     bool motionCommandPending_ = false;
