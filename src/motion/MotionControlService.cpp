@@ -51,10 +51,6 @@ MotionControlService::MotionControlService()
                     maintenanceCommandPending_ = false;
                     currentStatus_ = AcsMotionStatus{};
                     emit motionStatusChanged(currentStatus_);
-                    if (machineMode_ != MachineMode::Automatic) {
-                        machineMode_ = MachineMode::Automatic;
-                        emit machineModeChanged(machineMode_);
-                    }
                 }
                 if (connected) {
                     qCInfo(logMotion).noquote() << message;

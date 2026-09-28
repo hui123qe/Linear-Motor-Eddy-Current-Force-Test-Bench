@@ -342,6 +342,17 @@ void DeviceStatusPanel::showMachineModeDialog()
         targetMode == MachineMode::Automatic
             ? QStringLiteral("自动模式")
             : QStringLiteral("维修模式");
+    const TestExecutionService& executionService =
+        TestExecutionService::instance();
+    if (targetMode == MachineMode::Maintenance
+        && executionService.machineState() != MachineState::Idle) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法进入维修模式"),
+            QStringLiteral("任务当前不是空闲状态：%1")
+                .arg(executionService.machineStateReason()));
+        return;
+    }
 
     QMessageBox dialog(this);
     dialog.setIcon(QMessageBox::Question);
@@ -353,6 +364,15 @@ void DeviceStatusPanel::showMachineModeDialog()
     dialog.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
     dialog.exec();
     if (dialog.clickedButton() != switchButton) {
+        return;
+    }
+    if (targetMode == MachineMode::Maintenance
+        && executionService.machineState() != MachineState::Idle) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法进入维修模式"),
+            QStringLiteral("任务状态已经变化：%1")
+                .arg(executionService.machineStateReason()));
         return;
     }
 

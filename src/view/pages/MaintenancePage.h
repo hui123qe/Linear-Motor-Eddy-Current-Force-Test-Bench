@@ -40,7 +40,6 @@ private slots:
 
 private:
     void stopJog(bool showFailure);
-    void updateControlAvailability();
     void showCommandFailure(const QString& title, const QString& message);
 
     MetricCard* connectionCard_ = nullptr;
@@ -60,7 +59,6 @@ private:
     QPushButton* jogNegativeButton_ = nullptr;
     QPushButton* jogPositiveButton_ = nullptr;
     MachineMode machineMode_;
-    int motionState_ = 0;
     bool controllerConnected_ = false;
     bool axisEnabled_ = false;
     bool axisMoving_ = false;

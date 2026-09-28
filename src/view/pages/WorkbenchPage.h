@@ -54,7 +54,6 @@ private:
     void initializeConnections();
     void beginTest(const TestResultTargets& targets);
     void stopTest();
-    void updateControlAvailability();
 
     TestResultService resultService_;
     std::optional<TestParameters> configuration_;

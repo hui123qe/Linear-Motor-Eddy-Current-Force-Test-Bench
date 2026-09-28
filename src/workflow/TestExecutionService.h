@@ -68,10 +68,13 @@ private:
                                    const QString& reason);
     void finalizeExecutionGroup(ExperimentTerminalState state,
                                 const QString& reason);
+    void tryFinishPendingTerminalState(bool databaseUsable);
     void finishPendingTerminalState();
     void resetExecutionContext();
     void failExecution(const QString& message, bool databaseUsable);
-    void updateMachineState();
+    [[nodiscard]] bool hasActiveExecution() const;
+    [[nodiscard]] bool validateStartPrerequisites(
+        QString* errorMessage) const;
     void setMachineState(MachineState state, const QString& reason);
 
     TestParameters parameters_;
@@ -81,7 +84,6 @@ private:
     QString terminalReason_;
     int currentRepetitionIndex_ = 0;
     int motionState_ = 0;
-    bool axisMoving_ = false;
     int completedMotionCount_ = 0;
     int finalizedRecordCount_ = 0;
     qint64 currentRawSampleCount_ = 0;
@@ -91,8 +93,8 @@ private:
     bool controllerConnected_ = false;
     bool acquisitionReady_ = false;
     bool databaseReady_ = false;
-    MachineState machineState_ = MachineState::Error;
-    QString machineStateReason_ = QStringLiteral("ACS 控制器未连接");
+    MachineState machineState_ = MachineState::Idle;
+    QString machineStateReason_ = QStringLiteral("任务空闲");
     QString controllerStatusMessage_;
     QString acquisitionStatusMessage_;
     QString databaseStatusMessage_;

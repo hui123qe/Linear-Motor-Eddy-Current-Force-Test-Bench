@@ -281,7 +281,6 @@ MaintenancePage::MaintenancePage(QWidget* parent)
                 }
             });
 
-    updateControlAvailability();
 }
 
 void MaintenancePage::hideEvent(QHideEvent* event)
@@ -297,11 +296,25 @@ void MaintenancePage::hideEvent(QHideEvent* event)
 
 void MaintenancePage::onConnectButtonClicked()
 {
+    if (controllerConnected_) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("连接 ACS 控制器"),
+            QStringLiteral("ACS 控制器当前已经连接。"));
+        return;
+    }
     MotionControlService::instance().connectController();
 }
 
 void MaintenancePage::onDisconnectButtonClicked()
 {
+    if (!controllerConnected_) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("断开 ACS 控制器"),
+            QStringLiteral("ACS 控制器当前未连接。"));
+        return;
+    }
     QString errorMessage;
     if (!MotionControlService::instance().disconnectController(&errorMessage)) {
         showCommandFailure(QStringLiteral("断开连接失败"), errorMessage);
@@ -332,7 +345,6 @@ void MaintenancePage::onHaltButtonClicked()
         return;
     }
     jogCommandActive_ = false;
-    updateControlAvailability();
 }
 
 void MaintenancePage::onMoveToZeroClicked()
@@ -364,6 +376,10 @@ void MaintenancePage::onAbsoluteMoveClicked()
 void MaintenancePage::onJogNegativePressed()
 {
     if (jogCommandActive_) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("JOG- 启动"),
+            QStringLiteral("已有 JOG 命令正在执行。"));
         return;
     }
 
@@ -373,12 +389,15 @@ void MaintenancePage::onJogNegativePressed()
         return;
     }
     jogCommandActive_ = true;
-    updateControlAvailability();
 }
 
 void MaintenancePage::onJogPositivePressed()
 {
     if (jogCommandActive_) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("JOG+ 启动"),
+            QStringLiteral("已有 JOG 命令正在执行。"));
         return;
     }
 
@@ -388,7 +407,6 @@ void MaintenancePage::onJogPositivePressed()
         return;
     }
     jogCommandActive_ = true;
-    updateControlAvailability();
 }
 
 void MaintenancePage::onJogReleased()
@@ -408,7 +426,6 @@ void MaintenancePage::setControllerConnected(bool connected, const QString&)
         enableCard_->setValue(QStringLiteral("无效"));
         positionCard_->setValue(QStringLiteral("无效"));
     }
-    updateControlAvailability();
 }
 
 void MaintenancePage::setMachineMode(MachineMode mode)
@@ -421,12 +438,10 @@ void MaintenancePage::setMachineMode(MachineMode mode)
     if (mode != MachineMode::Maintenance) {
         stopJog(false);
     }
-    updateControlAvailability();
 }
 
 void MaintenancePage::setMotionStatus(const AcsMotionStatus& status)
 {
-    motionState_ = status.state;
     axisEnabled_ = status.axisEnabled;
     axisMoving_ = status.axisMoving;
     if (controllerConnected_) {
@@ -436,7 +451,6 @@ void MaintenancePage::setMotionStatus(const AcsMotionStatus& status)
             QStringLiteral("%1 mm")
                 .arg(status.feedbackPositionMillimeters, 0, 'f', 3));
     }
-    updateControlAvailability();
 }
 
 void MaintenancePage::handleMaintenanceCommandCompleted(
@@ -445,7 +459,6 @@ void MaintenancePage::handleMaintenanceCommandCompleted(
     if (command == MaintenanceCommand::Halt) {
         jogCommandActive_ = false;
     }
-    updateControlAvailability();
 }
 
 void MaintenancePage::handleMaintenanceCommandFailed(
@@ -456,7 +469,6 @@ void MaintenancePage::handleMaintenanceCommandFailed(
         || command == MaintenanceCommand::Halt) {
         jogCommandActive_ = false;
     }
-    updateControlAvailability();
     showCommandFailure(
         QStringLiteral("%1失败").arg(maintenanceCommandText(command)),
         message);
@@ -469,7 +481,6 @@ void MaintenancePage::stopJog(bool showFailure)
     }
     if (!controllerConnected_) {
         jogCommandActive_ = false;
-        updateControlAvailability();
         return;
     }
 
@@ -479,34 +490,6 @@ void MaintenancePage::stopJog(bool showFailure)
         showCommandFailure(QStringLiteral("停止维修运动失败"), errorMessage);
     }
     jogCommandActive_ = false;
-    updateControlAvailability();
-}
-
-void MaintenancePage::updateControlAvailability()
-{
-    const bool maintenanceReady =
-        controllerConnected_
-        && machineMode_ == MachineMode::Maintenance
-        && motionState_ == 0;
-    const bool stationary = !axisMoving_ && !jogCommandActive_;
-    const bool motionReady = maintenanceReady && axisEnabled_ && stationary;
-
-    connectButton_->setEnabled(!controllerConnected_);
-    disconnectButton_->setEnabled(
-        controllerConnected_ && motionState_ == 0 && stationary);
-    enableButton_->setEnabled(
-        maintenanceReady && !axisEnabled_ && stationary);
-    disableButton_->setEnabled(
-        maintenanceReady && axisEnabled_ && stationary);
-    haltButton_->setEnabled(
-        controllerConnected_ && (axisMoving_ || jogCommandActive_));
-    moveToZeroButton_->setEnabled(motionReady);
-    relativeDistanceInput_->setEnabled(motionReady);
-    relativeMoveButton_->setEnabled(motionReady);
-    absolutePositionInput_->setEnabled(motionReady);
-    absoluteMoveButton_->setEnabled(motionReady);
-    jogNegativeButton_->setEnabled(motionReady);
-    jogPositiveButton_->setEnabled(motionReady);
 }
 
 void MaintenancePage::showCommandFailure(const QString& title,
