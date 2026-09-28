@@ -249,12 +249,15 @@ void DeviceStatusPanel::updateSensorReadings(
     for (std::size_t index = 0; index < pressureValueLabels_.size(); ++index) {
         setSensorValue(
             pressureValueLabels_.at(index),
-            QString::number(readings.pressureValues.at(index), 'g', 10),
+            QStringLiteral("%1 L/min")
+                .arg(QString::number(
+                    readings.pressureValues.at(index), 'g', 3)),
             true);
     }
     setSensorValue(
         forceValueLabel_,
-        QString::number(readings.forceValue, 'g', 10),
+        QStringLiteral("%1 N")
+            .arg(QString::number(readings.forceValue, 'g', 3)),
         true);
 }
 
@@ -491,7 +494,7 @@ QWidget* DeviceStatusPanel::createPressureValuesCard()
     for (std::size_t index = 0; index < pressureValueLabels_.size(); ++index) {
         layout->addWidget(
             ViewHelpers::makeLabel(
-                QStringLiteral("气压%1").arg(index + 1), "sensorName"),
+                QStringLiteral("流量%1").arg(index + 1), "sensorName"),
             static_cast<int>(index),
             0);
         pressureValueLabels_.at(index) =
