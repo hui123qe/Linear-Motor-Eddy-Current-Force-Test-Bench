@@ -798,7 +798,6 @@ void AcsClient::pollStatus()
     }
 
     status.axisEnabled = (motorState & ACSC_MST_ENABLE) != 0;
-    status.axisMoving = (motorState & ACSC_MST_MOVE) != 0;
     status.feedbackPositionMillimeters =
         feedbackPosition / countsPerMillimeter_;
     status.feedbackVelocityMillimetersPerSecond =

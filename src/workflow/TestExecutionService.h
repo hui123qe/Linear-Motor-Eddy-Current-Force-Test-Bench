@@ -10,7 +10,6 @@
 #include <optional>
 
 struct AcquisitionBlock;
-struct AcsMotionStatus;
 
 enum class MachineState
 {
@@ -55,7 +54,10 @@ private:
     void handleExperimentTableCreated(int repetitionIndex,
                                       const QString& tableName);
     void handleCollectionStarted();
-    void handleMotionStatusChanged(const AcsMotionStatus& status);
+    void handleMotionStateChanged(int state, int errorCode);
+    void handleRecordProcessingEntered(int state);
+    void handleCompletedRecordCountChanged(int completedCount);
+    void handleMotionStartRequestWritten();
     void handleAcquisitionBlock(const AcquisitionBlock& block);
     void handleCollectionStopped();
     void handleExperimentTableFinished(int repetitionIndex,
@@ -84,11 +86,14 @@ private:
     QString terminalReason_;
     int currentRepetitionIndex_ = 0;
     int motionState_ = 0;
-    int completedMotionCount_ = 0;
+    int completedRecordCount_ = 0;
     int finalizedRecordCount_ = 0;
     qint64 currentRawSampleCount_ = 0;
     bool tableOpen_ = false;
+    bool currentRecordDataFinished_ = false;
     bool collectionStarted_ = false;
+    bool motionStartRequested_ = false;
+    bool motionStarted_ = false;
     bool userStopRequested_ = false;
     bool controllerConnected_ = false;
     bool acquisitionReady_ = false;

@@ -101,7 +101,7 @@ QString rateText(double value)
     return QStringLiteral("%1 %").arg(value, 0, 'f', 2);
 }
 
-QString motionStateText(int state, int errorCode, int currentCount)
+QString motionStateText(int state, int errorCode)
 {
     switch (state) {
     case 0:
@@ -121,19 +121,15 @@ QString motionStateText(int state, int errorCode, int currentCount)
     case 40:
         return QStringLiteral("运动到测试起点");
     case 50:
-        return QStringLiteral("第 %1 循环正向测试")
-            .arg(currentCount / 2 + 1);
+        return QStringLiteral("正向测试");
     case 55:
-        return QStringLiteral("第 %1 循环正向结果处理")
-            .arg((currentCount + 1) / 2);
+        return QStringLiteral("正向结果处理");
     case 60:
         return QStringLiteral("返回零点");
     case 70:
-        return QStringLiteral("第 %1 循环反向测试")
-            .arg(currentCount / 2 + 1);
+        return QStringLiteral("反向测试");
     case 75:
-        return QStringLiteral("第 %1 循环反向结果处理")
-            .arg(currentCount / 2);
+        return QStringLiteral("反向结果处理");
     case 100:
         return QStringLiteral("正常完成");
     case -1:
@@ -245,8 +241,7 @@ void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
     lowerRow->setSpacing(12);
 
     auto* motionPanel = ViewHelpers::makePanel(
-        QStringLiteral("当前运动状态"),
-        QStringLiteral("状态来自 ACS Buffer 的 G_STATE"));
+        QStringLiteral("当前运动状态"));
     auto* motionLayout = qobject_cast<QVBoxLayout*>(motionPanel->layout());
     auto* stateCard = new QFrame;
     stateCard->setObjectName(QStringLiteral("motionStateCard"));
@@ -257,12 +252,10 @@ void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
     currentStateValue_ = ViewHelpers::makeLabel(QStringLiteral("空闲"), "motionStateValue");
     currentStateValue_->setAlignment(Qt::AlignCenter);
     stateLayout->addWidget(currentStateValue_);
-    auto* stateHelp = ViewHelpers::makeLabel(
-        QStringLiteral("状态集合：空闲 / 参数检查 / 轴使能 / 到测试起点 / 正向测试 / 结果处理 / 反向测试 / 返回零点 / 完成 / 故障"),
-        "motionStateHelp");
-    stateHelp->setWordWrap(true);
-    stateLayout->addWidget(stateHelp);
     motionLayout->addWidget(stateCard);
+    displacementCard_ = new MetricCard(
+        QStringLiteral("位移"), QStringLiteral("-- mm"));
+    motionLayout->addWidget(displacementCard_);
     motionLayout->addStretch();
     lowerRow->addWidget(motionPanel, 1);
 
@@ -341,12 +334,13 @@ void WorkbenchPage::initializeConnections()
             this,
             &WorkbenchPage::setControllerConnected);
     connect(&motionControlService,
-            &MotionControlService::motionStatusChanged,
+            &MotionControlService::motionStateChanged,
             this,
-            [this](const AcsMotionStatus& status) {
-                setMotionStatus(
-                    status.state, status.errorCode, status.currentCount);
-            });
+            &WorkbenchPage::setMotionState);
+    connect(&motionControlService,
+            &MotionControlService::positionFeedbackChanged,
+            this,
+            &WorkbenchPage::setDisplacement);
     connect(&motionControlService,
             &MotionControlService::startRequestWritten,
             this,
@@ -564,13 +558,14 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
     if (!connected) {
         motionCommandPending_ = false;
         currentStateValue_->setText(QStringLiteral("ACS 未连接"));
+        displacementCard_->setValue(QStringLiteral("-- mm"));
         chartWidget_->start(false);
     } else {
-        currentStateValue_->setText(motionStateText(motionState_, 0, 0));
+        currentStateValue_->setText(motionStateText(motionState_, 0));
     }
 }
 
-void WorkbenchPage::setMotionStatus(int state, int errorCode, int currentCount)
+void WorkbenchPage::setMotionState(int state, int errorCode)
 {
     const int previousState = motionState_;
     motionState_ = state;
@@ -578,8 +573,19 @@ void WorkbenchPage::setMotionStatus(int state, int errorCode, int currentCount)
         motionCommandPending_ = false;
     }
 
-    currentStateValue_->setText(motionStateText(state, errorCode, currentCount));
-    chartWidget_->start(state == 50 || state == 70);
+    currentStateValue_->setText(
+        controllerConnected_ ? motionStateText(state, errorCode)
+                             : QStringLiteral("ACS 未连接"));
+    chartWidget_->start(controllerConnected_ && (state == 50 || state == 70));
+}
+
+void WorkbenchPage::setDisplacement(double positionMillimeters)
+{
+    displacementCard_->setValue(
+        controllerConnected_
+            ? QStringLiteral("%1 mm")
+                  .arg(positionMillimeters, 0, 'f', 3)
+            : QStringLiteral("-- mm"));
 }
 
 void WorkbenchPage::setMotionCommandPending(bool pending)

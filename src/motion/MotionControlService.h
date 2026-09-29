@@ -52,7 +52,12 @@ public:
 
 signals:
     void connectionChanged(bool connected, const QString& message);
-    void motionStatusChanged(const AcsMotionStatus& status);
+    void motionStateChanged(int state, int errorCode);
+    void recordProcessingEntered(int state);
+    void completedRecordCountChanged(int completedCount);
+    void axisEnabledChanged(bool enabled);
+    void positionFeedbackChanged(double positionMillimeters);
+    void velocityFeedbackChanged(double velocityMillimetersPerSecond);
     void machineModeChanged(MachineMode mode);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
     void forceTareWritten();
@@ -73,12 +78,12 @@ private:
 
     [[nodiscard]] bool validateMaintenanceCommand(
         bool requireEnabled,
-        bool requireStationary,
         QString* errorMessage) const;
 
     AcsClient* client_ = nullptr;
     QThread workerThread_;
     AcsMotionStatus currentStatus_;
+    bool hasStatusSnapshot_ = false;
     MachineMode machineMode_ = MachineMode::Automatic;
     bool maintenanceCommandPending_ = false;
     bool connected_ = false;

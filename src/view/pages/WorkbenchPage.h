@@ -31,7 +31,8 @@ public slots:
     void clearConfiguration();
     void setConfigurationLocked(bool locked);
     void setControllerConnected(bool connected, const QString& message);
-    void setMotionStatus(int state, int errorCode, int currentCount);
+    void setMotionState(int state, int errorCode);
+    void setDisplacement(double positionMillimeters);
     void setMotionCommandPending(bool pending);
     void appendForcePositionSamples(const QVector<QPointF>& samples);
     void clearChartData();
@@ -70,6 +71,7 @@ private:
     ChartWidget* chartWidget_ = nullptr;
     StatusPill* configurationStatus_ = nullptr;
     QLabel* currentStateValue_ = nullptr;
+    MetricCard* displacementCard_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     bool configurationLocked_ = false;

@@ -141,9 +141,21 @@ TestExecutionService::TestExecutionService()
             this,
             &TestExecutionService::handleCollectionStarted);
     connect(&motionService,
-            &MotionControlService::motionStatusChanged,
+            &MotionControlService::motionStateChanged,
             this,
-            &TestExecutionService::handleMotionStatusChanged);
+            &TestExecutionService::handleMotionStateChanged);
+    connect(&motionService,
+            &MotionControlService::recordProcessingEntered,
+            this,
+            &TestExecutionService::handleRecordProcessingEntered);
+    connect(&motionService,
+            &MotionControlService::completedRecordCountChanged,
+            this,
+            &TestExecutionService::handleCompletedRecordCountChanged);
+    connect(&motionService,
+            &MotionControlService::startRequestWritten,
+            this,
+            &TestExecutionService::handleMotionStartRequestWritten);
     connect(&acquisitionService,
             &DataAcquisitionService::blockReady,
             this,
@@ -231,10 +243,13 @@ bool TestExecutionService::start(const TestParameters& parameters,
                           + QLatin1Char('-')
                           + QDateTime::currentDateTime().toString(
                               QStringLiteral("yyyyMMdd_HHmmss"));
-    completedMotionCount_ = 0;
+    completedRecordCount_ = 0;
+    motionStartRequested_ = false;
+    motionStarted_ = false;
     finalizedRecordCount_ = 0;
     tableOpen_ = false;
     userStopRequested_ = false;
+    currentRecordDataFinished_ = false;
     pendingTerminalState_.reset();
     terminalReason_.clear();
     setMachineState(MachineState::Running, QStringLiteral("测试正在运行"));
@@ -290,7 +305,8 @@ void TestExecutionService::handleExperimentTableCreated(
     tableOpen_ = true;
     currentRawDataTableName_ = tableName;
     // 过期建表结果不得再启动采集，但已创建的表仍需正常收尾。
-    if (currentRepetitionIndex_ == 0 || userStopRequested_) {
+    if (currentRepetitionIndex_ == 0 || userStopRequested_
+        || pendingTerminalState_.has_value()) {
         handleCollectionStopped();
         return;
     }
@@ -304,7 +320,8 @@ void TestExecutionService::handleExperimentTableCreated(
 
 void TestExecutionService::handleCollectionStarted()
 {
-    if (currentRepetitionIndex_ == 0 || userStopRequested_) {
+    if (currentRepetitionIndex_ == 0 || userStopRequested_
+        || pendingTerminalState_.has_value()) {
         QString ignoredError;
         if (!DataAcquisitionService::instance().stopCollection(&ignoredError)) {
             qCWarning(logAcquisition).noquote()
@@ -316,54 +333,109 @@ void TestExecutionService::handleCollectionStarted()
     collectionStarted_ = true;
 
     // 运动程序包含全部正反向记录，后续记录只需重新启动采集。
-    if (currentRepetitionIndex_ > 1) {
+    if (currentRepetitionIndex_ > 1 || motionStartRequested_ || motionStarted_) {
         return;
     }
 
     QString errorMessage;
+    motionStartRequested_ = true;
     if (!MotionControlService::instance().start(parameters_, &errorMessage)) {
+        motionStartRequested_ = false;
         failExecution(errorMessage, true);
     }
 }
 
-void TestExecutionService::handleMotionStatusChanged(
-    const AcsMotionStatus& status)
+void TestExecutionService::handleMotionStartRequestWritten()
 {
-    const int previousMotionState = motionState_;
-    motionState_ = status.state;
-    completedMotionCount_ = status.currentCount;
+    if (!motionStartRequested_ || !hasActiveExecution()
+        || userStopRequested_ || pendingTerminalState_.has_value()) {
+        return;
+    }
+
+    motionStartRequested_ = false;
+    motionStarted_ = true;
+    completedRecordCount_ = 0;
+    qCInfo(logMotion)
+        << "[流程层][记录推进] 本次启动请求已写入，启用完成计数处理"
+        << "executionId=" << executionId_;
+}
+
+void TestExecutionService::handleMotionStateChanged(int state, int errorCode)
+{
+    const int previousState = motionState_;
+    motionState_ = state;
+    qCInfo(logMotion)
+        << "[流程层][运动状态] 状态变化"
+        << "executionId=" << executionId_
+        << "previousState=" << previousState
+        << "state=" << state
+        << "errorCode=" << errorCode;
 
     if (!hasActiveExecution()) {
         return;
     }
-    if (status.state < 0 && !userStopRequested_) {
+    if (state < 0 && !userStopRequested_) {
         failExecution(
             QStringLiteral("运动程序进入故障状态 %1，错误码 %2。")
-                .arg(status.state)
-                .arg(status.errorCode),
+                .arg(state)
+                .arg(errorCode),
             true);
+    }
+}
+
+void TestExecutionService::handleRecordProcessingEntered(int state)
+{
+    if (!hasActiveExecution() || !motionStarted_
+        || currentRepetitionIndex_ == 0 || userStopRequested_
+        || pendingTerminalState_.has_value()) {
+        qCDebug(logMotion)
+            << "[流程层][采集边界] 本次测试未启动或正在收尾，忽略处理边界"
+            << "state=" << state;
         return;
     }
 
-    if (pendingTerminalState_.has_value()) {
+    const AcquisitionState acquisitionState =
+        DataAcquisitionService::instance().state();
+    qCInfo(logMotion)
+        << "[流程层][采集边界] 进入记录处理状态"
+        << "executionId=" << executionId_
+        << "repetition=" << currentRepetitionIndex_
+        << "state=" << state
+        << "acquisitionState=" << static_cast<int>(acquisitionState)
+        << "table=" << currentRawDataTableName_;
+    if (acquisitionState == AcquisitionState::Starting
+        || acquisitionState == AcquisitionState::Collecting) {
+        requestCurrentCollectionStop();
+    }
+}
+
+void TestExecutionService::handleCompletedRecordCountChanged(int completedCount)
+{
+    // 建表、首次采集启动期间可能仍读到上次测试的计数，不能写入本次上下文。
+    if (!hasActiveExecution() || !motionStarted_
+        || userStopRequested_ || pendingTerminalState_.has_value()) {
+        qCDebug(logMotion)
+            << "[流程层][记录推进] 本次测试未启动或正在收尾，忽略完成计数"
+            << "executionId=" << executionId_
+            << "completedCount=" << completedCount;
+        return;
+    }
+    if (completedCount <= completedRecordCount_) {
+        qCDebug(logMotion)
+            << "[流程层][记录推进] 忽略清零、重复或回退的计数"
+            << "completedCount=" << completedCount
+            << "acceptedCount=" << completedRecordCount_;
         return;
     }
 
-    // 正向和反向测试各自产生一条记录，处理态是两条记录的固定边界。
-    const bool enteredProcessingState =
-        (status.state == 55 || status.state == 75)
-        && status.state != previousMotionState;
-    if (enteredProcessingState) {
-        const AcquisitionState acquisitionState =
-            DataAcquisitionService::instance().state();
-        if (acquisitionState == AcquisitionState::Starting
-            || acquisitionState == AcquisitionState::Collecting) {
-            requestCurrentCollectionStop();
-        }
-    }
-    if (completedMotionCount_ >= currentRepetitionIndex_) {
-        tryAdvanceAfterRepetition();
-    }
+    completedRecordCount_ = completedCount;
+    qCInfo(logMotion)
+        << "[流程层][记录推进] 接受本次测试完成计数"
+        << "executionId=" << executionId_
+        << "repetition=" << currentRepetitionIndex_
+        << "completedCount=" << completedRecordCount_
+        << "tableOpen=" << tableOpen_;
+    tryAdvanceAfterRepetition();
 }
 
 void TestExecutionService::handleAcquisitionBlock(
@@ -408,9 +480,6 @@ void TestExecutionService::handleExperimentTableFinished(
     const QString& tableName,
     qint64 sampleCount)
 {
-    // 数据库已完成本轮全部排队写入，仅解除写入屏障，等待运动状态推进流程。
-    tableOpen_ = false;
-
     // 流程已完成、停止或故障时，忽略迟到的收尾通知。
     if (currentRepetitionIndex_ == 0) {
         return;
@@ -430,6 +499,9 @@ void TestExecutionService::handleExperimentTableFinished(
     }
     currentRawDataTableName_ = tableName;
     currentRawSampleCount_ = sampleCount;
+    // 数据库收尾与完成计数分别到达，后到的条件负责尝试推进。
+    tableOpen_ = false;
+    currentRecordDataFinished_ = true;
 
     if (pendingTerminalState_.has_value()) {
         finishPendingTerminalState();
@@ -445,6 +517,7 @@ void TestExecutionService::prepareRepetition(int repetitionIndex)
     currentRawDataTableName_.clear();
     currentRawSampleCount_ = 0;
     collectionStarted_ = false;
+    currentRecordDataFinished_ = false;
 
     QString errorMessage;
     if (!AcquisitionDatabaseService::instance().beginExperimentTable(
@@ -469,18 +542,20 @@ void TestExecutionService::requestCurrentCollectionStop()
 
 void TestExecutionService::tryAdvanceAfterRepetition()
 {
-    if (currentRepetitionIndex_ == 0) {
+    if (!hasActiveExecution() || !motionStarted_
+        || currentRepetitionIndex_ == 0) {
         return;
     }
 
-    if (userStopRequested_) {
+    if (userStopRequested_ || pendingTerminalState_.has_value()) {
         if (!tableOpen_) {
             finishPendingTerminalState();
         }
         return;
     }
     // 下位记录计数和数据库收尾是两个独立完成条件，缺一不可进入下一条记录。
-    if (completedMotionCount_ < currentRepetitionIndex_ || tableOpen_) {
+    if (completedRecordCount_ < currentRepetitionIndex_
+        || !currentRecordDataFinished_ || tableOpen_) {
         return;
     }
 
@@ -639,12 +714,15 @@ void TestExecutionService::resetExecutionContext()
     currentRawDataTableName_.clear();
     terminalReason_.clear();
     currentRepetitionIndex_ = 0;
-    completedMotionCount_ = 0;
+    completedRecordCount_ = 0;
     finalizedRecordCount_ = 0;
     currentRawSampleCount_ = 0;
     tableOpen_ = false;
     collectionStarted_ = false;
+    currentRecordDataFinished_ = false;
     userStopRequested_ = false;
+    motionStartRequested_ = false;
+    motionStarted_ = false;
     pendingTerminalState_.reset();
 }
 

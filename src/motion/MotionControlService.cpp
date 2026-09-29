@@ -50,7 +50,7 @@ MotionControlService::MotionControlService()
                 if (!connected) {
                     maintenanceCommandPending_ = false;
                     currentStatus_ = AcsMotionStatus{};
-                    emit motionStatusChanged(currentStatus_);
+                    hasStatusSnapshot_ = false;
                 }
                 if (connected) {
                     qCInfo(logMotion).noquote() << message;
@@ -58,27 +58,44 @@ MotionControlService::MotionControlService()
                     qCWarning(logMotion).noquote() << message;
                 }
                 emit connectionChanged(connected, message);
+                if (!connected) {
+                    // 断线先通知业务终止，缓存复位不得作为记录完成事件发布。
+                    emit motionStateChanged(0, 0);
+                    emit axisEnabledChanged(false);
+                }
             });
     connect(client_,
             &AcsClient::statusChanged,
             this,
             [this](const AcsMotionStatus& status) {
-                const bool discreteStatusChanged =
-                    status.state != currentStatus_.state
-                    || status.errorCode != currentStatus_.errorCode
-                    || status.currentCount != currentStatus_.currentCount
-                    || status.axisEnabled != currentStatus_.axisEnabled
-                    || status.axisMoving != currentStatus_.axisMoving;
-                if (discreteStatusChanged) {
+                const AcsMotionStatus previous = currentStatus_;
+                const bool firstSnapshot = !hasStatusSnapshot_;
+                currentStatus_ = status;
+                hasStatusSnapshot_ = true;
+                // 同一快照先处理故障和采集边界，再发布完成计数。
+                if (firstSnapshot || status.state != previous.state
+                    || status.errorCode != previous.errorCode) {
                     qCInfo(logMotion)
                         << "ACS 状态变化：state=" << status.state
-                        << "errorCode=" << status.errorCode
-                        << "currentCount=" << status.currentCount
-                        << "axisEnabled=" << status.axisEnabled
-                        << "axisMoving=" << status.axisMoving;
+                        << "errorCode=" << status.errorCode;
+                    emit motionStateChanged(status.state, status.errorCode);
                 }
-                currentStatus_ = status;
-                emit motionStatusChanged(status);
+                if (status.state != previous.state
+                    && (status.state == 55 || status.state == 75)) {
+                    emit recordProcessingEntered(status.state);
+                }
+                if (firstSnapshot || status.currentCount != previous.currentCount) {
+                    qCInfo(logMotion)
+                        << "ACS 完成记录计数变化：previous=" << previous.currentCount
+                        << "completedCount=" << status.currentCount;
+                    emit completedRecordCountChanged(status.currentCount);
+                }
+                if (firstSnapshot || status.axisEnabled != previous.axisEnabled) {
+                    emit axisEnabledChanged(status.axisEnabled);
+                }
+                // 反馈持续发布，保证重连后即使位置不变也能恢复显示。
+                emit positionFeedbackChanged(status.feedbackPositionMillimeters);
+                emit velocityFeedbackChanged(status.feedbackVelocityMillimetersPerSecond);
             });
     connect(client_,
             &AcsClient::sensorReadingsChanged,
@@ -109,7 +126,12 @@ MotionControlService::MotionControlService()
     connect(client_,
             &AcsClient::startRequestWritten,
             this,
-            &MotionControlService::startRequestWritten);
+            [this] {
+                // AcsClient 已在写入启动请求前清零控制器计数。
+                // 同步比较基线，下一轮即使与上一轮计数相同也能发布变化。
+                currentStatus_.currentCount = 0;
+                emit startRequestWritten();
+            });
     connect(client_,
             &AcsClient::stopRequestWritten,
             this,
@@ -178,11 +200,10 @@ bool MotionControlService::disconnectController(QString* errorMessage)
         return false;
     }
     if (maintenanceCommandPending_
-        || currentStatus_.axisMoving
         || isActiveState(currentStatus_.state)) {
         setError(
             errorMessage,
-            QStringLiteral("轴或自动测试正在运动，请先停止后再断开 ACS 控制器。"));
+            QStringLiteral("维修命令正在处理或自动测试正在运行，请先停止后再断开 ACS 控制器。"));
         return false;
     }
 
@@ -230,11 +251,10 @@ bool MotionControlService::setMachineMode(MachineMode mode,
         return false;
     }
     if (maintenanceCommandPending_
-        || currentStatus_.state != 0
-        || currentStatus_.axisMoving) {
+        || currentStatus_.state != 0) {
         setError(
             errorMessage,
-            QStringLiteral("轴或自动流程正在运动，不能切换机器模式。"));
+            QStringLiteral("维修命令正在处理或自动流程未处于空闲状态，不能切换机器模式。"));
         return false;
     }
 
@@ -248,7 +268,7 @@ bool MotionControlService::setMachineMode(MachineMode mode,
 
 bool MotionControlService::enableAxis(QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(false, true, errorMessage)) {
+    if (!validateMaintenanceCommand(false, errorMessage)) {
         return false;
     }
     if (currentStatus_.axisEnabled) {
@@ -264,7 +284,7 @@ bool MotionControlService::enableAxis(QString* errorMessage)
 
 bool MotionControlService::disableAxis(QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(false, true, errorMessage)) {
+    if (!validateMaintenanceCommand(false, errorMessage)) {
         return false;
     }
     if (!currentStatus_.axisEnabled) {
@@ -280,7 +300,7 @@ bool MotionControlService::disableAxis(QString* errorMessage)
 
 bool MotionControlService::moveToZero(QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(true, true, errorMessage)) {
+    if (!validateMaintenanceCommand(true, errorMessage)) {
         return false;
     }
 
@@ -298,7 +318,7 @@ bool MotionControlService::moveToZero(QString* errorMessage)
 bool MotionControlService::moveRelative(double distanceMillimeters,
                                         QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(true, true, errorMessage)) {
+    if (!validateMaintenanceCommand(true, errorMessage)) {
         return false;
     }
     if (!std::isfinite(distanceMillimeters)
@@ -324,7 +344,7 @@ bool MotionControlService::moveRelative(double distanceMillimeters,
 bool MotionControlService::moveAbsolute(double positionMillimeters,
                                         QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(true, true, errorMessage)) {
+    if (!validateMaintenanceCommand(true, errorMessage)) {
         return false;
     }
     if (!std::isfinite(positionMillimeters)) {
@@ -348,7 +368,7 @@ bool MotionControlService::moveAbsolute(double positionMillimeters,
 
 bool MotionControlService::startJog(int direction, QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(true, true, errorMessage)) {
+    if (!validateMaintenanceCommand(true, errorMessage)) {
         return false;
     }
     if (direction != -1 && direction != 1) {
@@ -412,10 +432,6 @@ bool MotionControlService::start(const TestParameters& parameters,
             errorMessage,
             QStringLiteral("ACS 当前状态为 %1，只有空闲状态 0 可以启动。")
                 .arg(currentStatus_.state));
-        return false;
-    }
-    if (currentStatus_.axisMoving) {
-        setError(errorMessage, QStringLiteral("轴当前正在运动，不能启动自动测试。"));
         return false;
     }
     if (!validateTestParameters(parameters, errorMessage)) {
@@ -501,7 +517,6 @@ bool MotionControlService::stop(QString* errorMessage)
 
 bool MotionControlService::validateMaintenanceCommand(
     bool requireEnabled,
-    bool requireStationary,
     QString* errorMessage) const
 {
     if (!workerThread_.isRunning()) {
@@ -529,10 +544,6 @@ bool MotionControlService::validateMaintenanceCommand(
     }
     if (requireEnabled && !currentStatus_.axisEnabled) {
         setError(errorMessage, QStringLiteral("轴尚未使能。"));
-        return false;
-    }
-    if (requireStationary && currentStatus_.axisMoving) {
-        setError(errorMessage, QStringLiteral("轴正在运动，请先停止。"));
         return false;
     }
 

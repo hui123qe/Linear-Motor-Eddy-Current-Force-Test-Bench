@@ -26,7 +26,6 @@ struct AcsMotionStatus
     int errorCode = 0;
     int currentCount = 0;
     bool axisEnabled = false;
-    bool axisMoving = false;
     double feedbackPositionMillimeters = 0.0;
     double feedbackVelocityMillimetersPerSecond = 0.0;
 };

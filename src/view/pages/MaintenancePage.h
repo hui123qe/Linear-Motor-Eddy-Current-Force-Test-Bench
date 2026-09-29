@@ -33,7 +33,8 @@ private slots:
     void onJogReleased();
     void setControllerConnected(bool connected, const QString& message);
     void setMachineMode(MachineMode mode);
-    void setMotionStatus(const AcsMotionStatus& status);
+    void setAxisEnabled(bool enabled);
+    void setPosition(double positionMillimeters);
     void handleMaintenanceCommandCompleted(MaintenanceCommand command);
     void handleMaintenanceCommandFailed(MaintenanceCommand command,
                                         const QString& message);
@@ -61,6 +62,5 @@ private:
     MachineMode machineMode_;
     bool controllerConnected_ = false;
     bool axisEnabled_ = false;
-    bool axisMoving_ = false;
     bool jogCommandActive_ = false;
 };

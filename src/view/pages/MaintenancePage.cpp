@@ -261,9 +261,13 @@ MaintenancePage::MaintenancePage(QWidget* parent)
             this,
             &MaintenancePage::setMachineMode);
     connect(&motionService,
-            &MotionControlService::motionStatusChanged,
+            &MotionControlService::axisEnabledChanged,
             this,
-            &MaintenancePage::setMotionStatus);
+            &MaintenancePage::setAxisEnabled);
+    connect(&motionService,
+            &MotionControlService::positionFeedbackChanged,
+            this,
+            &MaintenancePage::setPosition);
     connect(&motionService,
             &MotionControlService::maintenanceCommandCompleted,
             this,
@@ -286,7 +290,7 @@ MaintenancePage::MaintenancePage(QWidget* parent)
 void MaintenancePage::hideEvent(QHideEvent* event)
 {
     if (machineMode_ == MachineMode::Maintenance
-        && (axisMoving_ || jogCommandActive_)) {
+        && jogCommandActive_) {
         QString ignoredError;
         static_cast<void>(MotionControlService::instance().haltMaintenanceMotion(&ignoredError));
         jogCommandActive_ = false;
@@ -421,7 +425,6 @@ void MaintenancePage::setControllerConnected(bool connected, const QString&)
         connected ? QStringLiteral("已连接") : QStringLiteral("未连接"));
     if (!connected) {
         axisEnabled_ = false;
-        axisMoving_ = false;
         jogCommandActive_ = false;
         enableCard_->setValue(QStringLiteral("无效"));
         positionCard_->setValue(QStringLiteral("无效"));
@@ -440,16 +443,21 @@ void MaintenancePage::setMachineMode(MachineMode mode)
     }
 }
 
-void MaintenancePage::setMotionStatus(const AcsMotionStatus& status)
+void MaintenancePage::setAxisEnabled(bool enabled)
 {
-    axisEnabled_ = status.axisEnabled;
-    axisMoving_ = status.axisMoving;
+    axisEnabled_ = enabled;
     if (controllerConnected_) {
         enableCard_->setValue(
             axisEnabled_ ? QStringLiteral("上使能") : QStringLiteral("下使能"));
+    }
+}
+
+void MaintenancePage::setPosition(double positionMillimeters)
+{
+    if (controllerConnected_) {
         positionCard_->setValue(
             QStringLiteral("%1 mm")
-                .arg(status.feedbackPositionMillimeters, 0, 'f', 3));
+                .arg(positionMillimeters, 0, 'f', 3));
     }
 }
 
