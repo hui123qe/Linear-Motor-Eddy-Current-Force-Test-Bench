@@ -87,7 +87,7 @@ signals:
     void controllerRebootFailed(const QString& message);
     void statusChanged(const AcsMotionStatus& status);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
-    void forceTareWritten();
+    void forceTareStarted();
     void forceTareFailed(const QString& message);
     void maintenanceCommandCompleted(MaintenanceCommand command);
     void maintenanceCommandFailed(MaintenanceCommand command,

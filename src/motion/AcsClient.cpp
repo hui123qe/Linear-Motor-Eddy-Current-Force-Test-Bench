@@ -28,6 +28,7 @@ constexpr int kMaximumPollIntervalMilliseconds = 5000;
 constexpr int kSensorPollIntervalMilliseconds = 200;
 constexpr int kErrorBufferSize = 512;
 constexpr int kHomingBuffer = 7;
+constexpr int kForceTareBuffer = 8;
 constexpr int kControllerRebootTimeoutMilliseconds = 30000;
 
 const std::array<const char*, kAcquisitionBlockCount> kCollectionBlockVariables = {
@@ -156,18 +157,21 @@ void AcsClient::tareForceSensor()
     }
 
     qCInfo(logMotion)
-        << "写入力传感器去皮请求，variable="
-        << AcsVariableNames::forceTareRequest
-        << "value=1";
-    QString errorMessage;
-    if (!writeInteger(
-            AcsVariableNames::forceTareRequest, 1, &errorMessage)) {
-        qCWarning(logMotion).noquote() << errorMessage;
-        emit forceTareFailed(errorMessage);
+        << "启动力传感器去皮程序，buffer=" << kForceTareBuffer;
+    if (acsc_RunBuffer(static_cast<HANDLE>(controllerHandle_),
+                       kForceTareBuffer,
+                       nullptr,
+                       ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(
+            QStringLiteral("启动 ACS Buffer %1 力传感器去皮程序失败")
+                .arg(kForceTareBuffer));
+        qCWarning(logMotion).noquote() << message;
+        emit forceTareFailed(message);
         return;
     }
 
-    emit forceTareWritten();
+    emit forceTareStarted();
 }
 
 void AcsClient::enableAxis()

@@ -29,7 +29,7 @@ private slots:
     void onInspectButtonClicked();
     void updateAcsConnectionDisplay(bool connected, const QString&);
     void updateSensorReadings(const AcsSensorReadings& readings);
-    void handleForceTareWritten();
+    void handleForceTareStarted();
     void handleForceTareFailed(const QString& message);
 
 private:

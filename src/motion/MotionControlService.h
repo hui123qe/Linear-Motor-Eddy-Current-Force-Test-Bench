@@ -67,7 +67,7 @@ signals:
     void homeRunningChanged(bool running);
     void machineModeChanged(MachineMode mode);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
-    void forceTareWritten();
+    void forceTareStarted();
     void forceTareFailed(const QString& message);
     void maintenanceCommandCompleted(MaintenanceCommand command);
     void maintenanceCommandFailed(MaintenanceCommand command,
@@ -93,6 +93,7 @@ private:
     bool hasStatusSnapshot_ = false;
     MachineMode machineMode_ = MachineMode::Automatic;
     bool maintenanceCommandPending_ = false;
+    bool forceTarePending_ = false;
     bool connected_ = false;
     bool initialized_ = false;
 };

@@ -157,9 +157,9 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
             this,
             &DeviceStatusPanel::updateSensorReadings);
     connect(&motionControlService,
-            &MotionControlService::forceTareWritten,
+            &MotionControlService::forceTareStarted,
             this,
-            &DeviceStatusPanel::handleForceTareWritten);
+            &DeviceStatusPanel::handleForceTareStarted);
     connect(&motionControlService,
             &MotionControlService::forceTareFailed,
             this,
@@ -261,13 +261,13 @@ void DeviceStatusPanel::updateSensorReadings(
         true);
 }
 
-void DeviceStatusPanel::handleForceTareWritten()
+void DeviceStatusPanel::handleForceTareStarted()
 {
     forceTarePending_ = false;
     QMessageBox::information(
         this,
         QStringLiteral("力传感器去皮"),
-        QStringLiteral("去皮请求已写入 ACS 控制器。"));
+        QStringLiteral("ACS Buffer 8 去皮程序已启动。"));
 }
 
 void DeviceStatusPanel::handleForceTareFailed(const QString& message)
@@ -418,7 +418,7 @@ void DeviceStatusPanel::showForceTareDialog()
     dialog.setWindowTitle(QStringLiteral("力传感器去皮"));
     dialog.setText(QStringLiteral("确认将当前力传感器值置零？"));
     QAbstractButton* tareButton = dialog.addButton(
-        QStringLiteral("置零"), QMessageBox::AcceptRole);
+        QStringLiteral("去皮"), QMessageBox::AcceptRole);
     dialog.addButton(QStringLiteral("取消"), QMessageBox::RejectRole);
     dialog.exec();
     if (dialog.clickedButton() != tareButton) {

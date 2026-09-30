@@ -1,10 +1,19 @@
 #/ Controller version = 4.20
-#/ Date = 9/29/2026 8:17 PM
+#/ Date = 9/30/2026 9:10 AM
 #/ User remarks = 
 #1
 !PNAME=
 !PDESC=
 AUTOEXEC:
+
+TILL ECST.#OP = 1
+
+
+EC_DOUT3.4=0!力传感器去皮
+ECOUT(208,EC_DOUT3)
+
+
+
 while 1
 ! 数字量输出
 ECOUT(226,EC_DOUT1)
@@ -65,8 +74,7 @@ Down_FLowA=EC_AIN5*2.5!底部流量计1，单位L/min
 !力传感器输入
 ECIN(210,EC_AIN9)
 Froce_Sensor=EC_AIN9
-ECOUT(208,EC_DOUT3)
-EC_DOUT3.4=Tara!力传感器去皮
+
 end
 STOP
 #2
@@ -1049,6 +1057,27 @@ AUTOEXEC:
 HomeDone = 0
 HomeRunning = 0
 
+
+STOP
+#8
+!PNAME=Tare
+!PDESC=
+
+
+! 前提：输出映射已建立，去皮位当前为0
+IF ECST.#OP = 0
+    DISP "EtherCAT is not operational!"
+    STOP
+END
+
+! 发出去皮信号
+EC_DOUT3.4 = 1
+
+! 示例保持100ms，实际按传感器手册设置
+WAIT 100
+
+! 释放去皮信号，为下一次触发做准备
+EC_DOUT3.4 = 0
 
 STOP
 #A

@@ -49,6 +49,7 @@ MotionControlService::MotionControlService()
                 connected_ = connected;
                 if (!connected) {
                     maintenanceCommandPending_ = false;
+                    forceTarePending_ = false;
                     currentStatus_ = AcsMotionStatus{};
                     hasStatusSnapshot_ = false;
                     emit homeDoneChanged(false);
@@ -124,13 +125,19 @@ MotionControlService::MotionControlService()
                 emit controllerResetFailed(message);
             });
     connect(client_,
-            &AcsClient::forceTareWritten,
+            &AcsClient::forceTareStarted,
             this,
-            &MotionControlService::forceTareWritten);
+            [this] {
+                forceTarePending_ = false;
+                emit forceTareStarted();
+            });
     connect(client_,
             &AcsClient::forceTareFailed,
             this,
-            &MotionControlService::forceTareFailed);
+            [this](const QString& message) {
+                forceTarePending_ = false;
+                emit forceTareFailed(message);
+            });
     connect(client_,
             &AcsClient::maintenanceCommandCompleted,
             this,
@@ -256,8 +263,31 @@ void MotionControlService::tareForceSensor()
         emit forceTareFailed(message);
         return;
     }
+    if (!hasStatusSnapshot_) {
+        const QString message =
+            QStringLiteral("尚未读取到 ACS 状态，不能执行力传感器去皮。");
+        qCWarning(logMotion).noquote() << message;
+        emit forceTareFailed(message);
+        return;
+    }
+    if (forceTarePending_) {
+        const QString message =
+            QStringLiteral("力传感器去皮请求正在处理中，请勿重复操作。");
+        qCWarning(logMotion).noquote() << message;
+        emit forceTareFailed(message);
+        return;
+    }
+    if (maintenanceCommandPending_ || currentStatus_.homeRunning
+        || currentStatus_.state != 0) {
+        const QString message = QStringLiteral(
+            "维修命令、回零或自动流程正在执行，不能进行力传感器去皮。");
+        qCWarning(logMotion).noquote() << message;
+        emit forceTareFailed(message);
+        return;
+    }
 
-    qCInfo(logMotion) << "请求执行力传感器去皮";
+    qCInfo(logMotion) << "请求启动 ACS Buffer 8 执行力传感器去皮";
+    forceTarePending_ = true;
     QMetaObject::invokeMethod(
         client_, &AcsClient::tareForceSensor, Qt::QueuedConnection);
 }

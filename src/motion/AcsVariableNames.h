@@ -13,7 +13,6 @@ inline constexpr std::array<const char*, 5> pressureValues = {
 };
 
 inline constexpr char forceValue[] = "CURRFORCE";
-inline constexpr char forceTareRequest[] = "G_FORCE_TARE_REQ";
 inline constexpr char homeDone[] = "HomeDone";
 inline constexpr char homeRunning[] = "HomeRunning";
 inline constexpr char positioningAcceleration[] = "G_N_ACC";
