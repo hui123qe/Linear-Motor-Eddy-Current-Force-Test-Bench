@@ -51,6 +51,8 @@ MotionControlService::MotionControlService()
                     maintenanceCommandPending_ = false;
                     currentStatus_ = AcsMotionStatus{};
                     hasStatusSnapshot_ = false;
+                    emit homeDoneChanged(false);
+                    emit homeRunningChanged(false);
                 }
                 if (connected) {
                     qCInfo(logMotion).noquote() << message;
@@ -93,6 +95,12 @@ MotionControlService::MotionControlService()
                 if (firstSnapshot || status.axisEnabled != previous.axisEnabled) {
                     emit axisEnabledChanged(status.axisEnabled);
                 }
+                if (firstSnapshot || status.homeDone != previous.homeDone) {
+                    emit homeDoneChanged(status.homeDone);
+                }
+                if (firstSnapshot || status.homeRunning != previous.homeRunning) {
+                    emit homeRunningChanged(status.homeRunning);
+                }
                 // 反馈持续发布，保证重连后即使位置不变也能恢复显示。
                 emit positionFeedbackChanged(status.feedbackPositionMillimeters);
                 emit velocityFeedbackChanged(status.feedbackVelocityMillimetersPerSecond);
@@ -101,6 +109,20 @@ MotionControlService::MotionControlService()
             &AcsClient::sensorReadingsChanged,
             this,
             &MotionControlService::sensorReadingsChanged);
+    connect(client_,
+            &AcsClient::controllerRebootCompleted,
+            this,
+            [this] {
+                maintenanceCommandPending_ = false;
+                emit controllerResetCompleted();
+            });
+    connect(client_,
+            &AcsClient::controllerRebootFailed,
+            this,
+            [this](const QString& message) {
+                maintenanceCommandPending_ = false;
+                emit controllerResetFailed(message);
+            });
     connect(client_,
             &AcsClient::forceTareWritten,
             this,
@@ -121,6 +143,11 @@ MotionControlService::MotionControlService()
             this,
             [this](MaintenanceCommand command, const QString& message) {
                 maintenanceCommandPending_ = false;
+                if (command == MaintenanceCommand::HomeAxis
+                    && currentStatus_.homeRunning) {
+                    currentStatus_.homeRunning = false;
+                    emit homeRunningChanged(false);
+                }
                 emit maintenanceCommandFailed(command, message);
             });
     connect(client_,
@@ -298,18 +325,40 @@ bool MotionControlService::disableAxis(QString* errorMessage)
     return true;
 }
 
-bool MotionControlService::moveToZero(QString* errorMessage)
+bool MotionControlService::homeAxis(QString* errorMessage)
 {
-    if (!validateMaintenanceCommand(true, errorMessage)) {
+    if (!workerThread_.isRunning()) {
+        setError(errorMessage, QStringLiteral("ACS 电机服务尚未初始化。"));
+        return false;
+    }
+    if (!connected_ || !hasStatusSnapshot_) {
+        setError(errorMessage, QStringLiteral("ACS 控制器未连接或状态尚未就绪。"));
+        return false;
+    }
+    if (maintenanceCommandPending_) {
+        setError(errorMessage, QStringLiteral("上一条控制命令正在处理中。"));
+        return false;
+    }
+    if (currentStatus_.homeRunning) {
+        setError(errorMessage, QStringLiteral("机器正在回零。"));
+        return false;
+    }
+    if (currentStatus_.state != 0) {
+        setError(
+            errorMessage,
+            QStringLiteral("机器当前处于运行状态 %1，不能回零。")
+                .arg(currentStatus_.state));
         return false;
     }
 
     qCInfo(logMotion) << "接受维修回零请求";
     maintenanceCommandPending_ = true;
+    currentStatus_.homeRunning = true;
+    emit homeRunningChanged(true);
     QMetaObject::invokeMethod(
         client_,
         [client = client_] {
-            client->moveToZero(kMaintenancePtpVelocityMillimetersPerSecond);
+            client->homeAxis();
         },
         Qt::QueuedConnection);
     return true;
@@ -412,6 +461,49 @@ AcsClient* MotionControlService::acsClient() const
     return client_;
 }
 
+bool MotionControlService::resetController(QString* errorMessage)
+{
+    if (!workerThread_.isRunning()) {
+        setError(errorMessage, QStringLiteral("ACS 电机服务尚未初始化。"));
+        return false;
+    }
+    if (!connected_ || !hasStatusSnapshot_) {
+        setError(errorMessage, QStringLiteral("ACS 控制器未连接或状态尚未就绪。"));
+        return false;
+    }
+    if (maintenanceCommandPending_) {
+        setError(errorMessage, QStringLiteral("上一条控制命令正在处理中。"));
+        return false;
+    }
+    if (currentStatus_.homeRunning) {
+        setError(errorMessage, QStringLiteral("机器正在回零，不能复位控制器。"));
+        return false;
+    }
+    if (currentStatus_.state != 0) {
+        setError(
+            errorMessage,
+            QStringLiteral("机器当前处于运行状态 %1，不能复位控制器。")
+                .arg(currentStatus_.state));
+        return false;
+    }
+
+    qCWarning(logMotion) << "接受 ACS 控制器复位请求";
+    maintenanceCommandPending_ = true;
+    QMetaObject::invokeMethod(
+        client_, &AcsClient::rebootController, Qt::QueuedConnection);
+    return true;
+}
+
+bool MotionControlService::homeDone() const
+{
+    return connected_ && hasStatusSnapshot_ && currentStatus_.homeDone;
+}
+
+bool MotionControlService::homeRunning() const
+{
+    return connected_ && hasStatusSnapshot_ && currentStatus_.homeRunning;
+}
+
 bool MotionControlService::start(const TestParameters& parameters,
                                  QString* errorMessage)
 {
@@ -425,6 +517,20 @@ bool MotionControlService::start(const TestParameters& parameters,
     }
     if (machineMode_ != MachineMode::Automatic) {
         setError(errorMessage, QStringLiteral("机器当前处于维修模式，不能启动自动测试。"));
+        return false;
+    }
+    if (maintenanceCommandPending_) {
+        setError(errorMessage, QStringLiteral("控制命令正在处理中，不能启动自动测试。"));
+        return false;
+    }
+    if (homeRunning()) {
+        setError(errorMessage,
+                 QStringLiteral("机器正在回零，不能启动自动测试。"));
+        return false;
+    }
+    if (!homeDone()) {
+        setError(errorMessage,
+                 QStringLiteral("机器尚未完成回零，不能启动自动测试。"));
         return false;
     }
     if (currentStatus_.state != 0) {

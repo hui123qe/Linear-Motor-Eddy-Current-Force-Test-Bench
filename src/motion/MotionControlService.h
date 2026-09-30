@@ -30,13 +30,14 @@ public:
 
     void connectController();
     [[nodiscard]] bool disconnectController(QString* errorMessage = nullptr);
+    [[nodiscard]] bool resetController(QString* errorMessage = nullptr);
     void tareForceSensor();
     [[nodiscard]] MachineMode machineMode() const;
     [[nodiscard]] bool setMachineMode(MachineMode mode,
                                       QString* errorMessage = nullptr);
     [[nodiscard]] bool enableAxis(QString* errorMessage = nullptr);
     [[nodiscard]] bool disableAxis(QString* errorMessage = nullptr);
-    [[nodiscard]] bool moveToZero(QString* errorMessage = nullptr);
+    [[nodiscard]] bool homeAxis(QString* errorMessage = nullptr);
     [[nodiscard]] bool moveRelative(double distanceMillimeters,
                                     QString* errorMessage = nullptr);
     [[nodiscard]] bool moveAbsolute(double positionMillimeters,
@@ -46,18 +47,24 @@ public:
     [[nodiscard]] bool haltMaintenanceMotion(
         QString* errorMessage = nullptr);
     [[nodiscard]] AcsClient* acsClient() const;
+    [[nodiscard]] bool homeDone() const;
+    [[nodiscard]] bool homeRunning() const;
     [[nodiscard]] bool start(const TestParameters& parameters,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);
 
 signals:
     void connectionChanged(bool connected, const QString& message);
+    void controllerResetCompleted();
+    void controllerResetFailed(const QString& message);
     void motionStateChanged(int state, int errorCode);
     void recordProcessingEntered(int state);
     void completedRecordCountChanged(int completedCount);
     void axisEnabledChanged(bool enabled);
     void positionFeedbackChanged(double positionMillimeters);
     void velocityFeedbackChanged(double velocityMillimetersPerSecond);
+    void homeDoneChanged(bool done);
+    void homeRunningChanged(bool running);
     void machineModeChanged(MachineMode mode);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
     void forceTareWritten();

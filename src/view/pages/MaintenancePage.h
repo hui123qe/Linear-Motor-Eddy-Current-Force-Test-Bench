@@ -25,7 +25,7 @@ private slots:
     void onEnableButtonClicked();
     void onDisableButtonClicked();
     void onHaltButtonClicked();
-    void onMoveToZeroClicked();
+    void onHomeButtonClicked();
     void onRelativeMoveClicked();
     void onAbsoluteMoveClicked();
     void onJogNegativePressed();
@@ -34,6 +34,8 @@ private slots:
     void setControllerConnected(bool connected, const QString& message);
     void setMachineMode(MachineMode mode);
     void setAxisEnabled(bool enabled);
+    void setMotionState(int state, int errorCode);
+    void setHomeRunning(bool running);
     void setPosition(double positionMillimeters);
     void handleMaintenanceCommandCompleted(MaintenanceCommand command);
     void handleMaintenanceCommandFailed(MaintenanceCommand command,
@@ -42,6 +44,7 @@ private slots:
 private:
     void stopJog(bool showFailure);
     void showCommandFailure(const QString& title, const QString& message);
+    void updateHomeButtonState();
 
     MetricCard* connectionCard_ = nullptr;
     MetricCard* enableCard_ = nullptr;
@@ -54,7 +57,7 @@ private:
     QPushButton* enableButton_ = nullptr;
     QPushButton* disableButton_ = nullptr;
     QPushButton* haltButton_ = nullptr;
-    QPushButton* moveToZeroButton_ = nullptr;
+    QPushButton* homeButton_ = nullptr;
     QPushButton* relativeMoveButton_ = nullptr;
     QPushButton* absoluteMoveButton_ = nullptr;
     QPushButton* jogNegativeButton_ = nullptr;
@@ -63,4 +66,7 @@ private:
     bool controllerConnected_ = false;
     bool axisEnabled_ = false;
     bool jogCommandActive_ = false;
+    bool homeCommandRequested_ = false;
+    bool homeRunning_ = false;
+    int motionState_ = 0;
 };

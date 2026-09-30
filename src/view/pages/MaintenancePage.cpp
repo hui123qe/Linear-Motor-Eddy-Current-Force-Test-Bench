@@ -59,8 +59,8 @@ QString maintenanceCommandText(MaintenanceCommand command)
         return QStringLiteral("上使能");
     case MaintenanceCommand::DisableAxis:
         return QStringLiteral("下使能");
-    case MaintenanceCommand::MoveToZero:
-        return QStringLiteral("移动到零点");
+    case MaintenanceCommand::HomeAxis:
+        return QStringLiteral("回零");
     case MaintenanceCommand::RelativeMove:
         return QStringLiteral("相对运动");
     case MaintenanceCommand::AbsoluteMove:
@@ -149,9 +149,9 @@ MaintenancePage::MaintenancePage(QWidget* parent)
         QStringLiteral("PTP 运动"),
         QStringLiteral("速度固定为 50 mm/s，不配置软件位置限位"));
     auto* ptpLayout = qobject_cast<QVBoxLayout*>(ptpPanel->layout());
-    moveToZeroButton_ = ViewHelpers::makeButton(
-        QStringLiteral("移动到零点"), QStringLiteral("primary"));
-    ptpLayout->addWidget(moveToZeroButton_);
+    homeButton_ = ViewHelpers::makeButton(
+        QStringLiteral("回零"), QStringLiteral("primary"));
+    ptpLayout->addWidget(homeButton_);
     ptpLayout->addWidget(ViewHelpers::makeDivider());
 
     auto* relativeForm = new QFormLayout;
@@ -222,10 +222,10 @@ MaintenancePage::MaintenancePage(QWidget* parent)
             &QPushButton::clicked,
             this,
             &MaintenancePage::onHaltButtonClicked);
-    connect(moveToZeroButton_,
+    connect(homeButton_,
             &QPushButton::clicked,
             this,
-            &MaintenancePage::onMoveToZeroClicked);
+            &MaintenancePage::onHomeButtonClicked);
     connect(relativeMoveButton_,
             &QPushButton::clicked,
             this,
@@ -265,6 +265,14 @@ MaintenancePage::MaintenancePage(QWidget* parent)
             this,
             &MaintenancePage::setAxisEnabled);
     connect(&motionService,
+            &MotionControlService::motionStateChanged,
+            this,
+            &MaintenancePage::setMotionState);
+    connect(&motionService,
+            &MotionControlService::homeRunningChanged,
+            this,
+            &MaintenancePage::setHomeRunning);
+    connect(&motionService,
             &MotionControlService::positionFeedbackChanged,
             this,
             &MaintenancePage::setPosition);
@@ -285,6 +293,7 @@ MaintenancePage::MaintenancePage(QWidget* parent)
                 }
             });
 
+    updateHomeButtonState();
 }
 
 void MaintenancePage::hideEvent(QHideEvent* event)
@@ -351,12 +360,22 @@ void MaintenancePage::onHaltButtonClicked()
     jogCommandActive_ = false;
 }
 
-void MaintenancePage::onMoveToZeroClicked()
+void MaintenancePage::onHomeButtonClicked()
 {
-    QString errorMessage;
-    if (!MotionControlService::instance().moveToZero(&errorMessage)) {
-        showCommandFailure(QStringLiteral("移动到零点失败"), errorMessage);
+    if (machineMode_ != MachineMode::Maintenance) {
+        showCommandFailure(
+            QStringLiteral("回零失败"),
+            QStringLiteral("机器不在维修模式。"));
+        return;
     }
+
+    QString errorMessage;
+    if (!MotionControlService::instance().homeAxis(&errorMessage)) {
+        showCommandFailure(QStringLiteral("回零失败"), errorMessage);
+        return;
+    }
+    homeCommandRequested_ = true;
+    updateHomeButtonState();
 }
 
 void MaintenancePage::onRelativeMoveClicked()
@@ -426,9 +445,13 @@ void MaintenancePage::setControllerConnected(bool connected, const QString&)
     if (!connected) {
         axisEnabled_ = false;
         jogCommandActive_ = false;
+        homeCommandRequested_ = false;
+        homeRunning_ = false;
+        motionState_ = 0;
         enableCard_->setValue(QStringLiteral("无效"));
         positionCard_->setValue(QStringLiteral("无效"));
     }
+    updateHomeButtonState();
 }
 
 void MaintenancePage::setMachineMode(MachineMode mode)
@@ -441,6 +464,7 @@ void MaintenancePage::setMachineMode(MachineMode mode)
     if (mode != MachineMode::Maintenance) {
         stopJog(false);
     }
+    updateHomeButtonState();
 }
 
 void MaintenancePage::setAxisEnabled(bool enabled)
@@ -450,6 +474,19 @@ void MaintenancePage::setAxisEnabled(bool enabled)
         enableCard_->setValue(
             axisEnabled_ ? QStringLiteral("上使能") : QStringLiteral("下使能"));
     }
+}
+
+void MaintenancePage::setMotionState(int state, int errorCode)
+{
+    Q_UNUSED(errorCode)
+    motionState_ = state;
+    updateHomeButtonState();
+}
+
+void MaintenancePage::setHomeRunning(bool running)
+{
+    homeRunning_ = running;
+    updateHomeButtonState();
 }
 
 void MaintenancePage::setPosition(double positionMillimeters)
@@ -464,6 +501,13 @@ void MaintenancePage::setPosition(double positionMillimeters)
 void MaintenancePage::handleMaintenanceCommandCompleted(
     MaintenanceCommand command)
 {
+    if (command == MaintenanceCommand::HomeAxis) {
+        if (!homeCommandRequested_) {
+            return;
+        }
+        homeCommandRequested_ = false;
+        updateHomeButtonState();
+    }
     if (command == MaintenanceCommand::Halt) {
         jogCommandActive_ = false;
     }
@@ -473,6 +517,13 @@ void MaintenancePage::handleMaintenanceCommandFailed(
     MaintenanceCommand command,
     const QString& message)
 {
+    if (command == MaintenanceCommand::HomeAxis) {
+        if (!homeCommandRequested_) {
+            return;
+        }
+        homeCommandRequested_ = false;
+        updateHomeButtonState();
+    }
     if (command == MaintenanceCommand::StartJog
         || command == MaintenanceCommand::Halt) {
         jogCommandActive_ = false;
@@ -504,4 +555,14 @@ void MaintenancePage::showCommandFailure(const QString& title,
                                          const QString& message)
 {
     QMessageBox::warning(this, title, message);
+}
+
+void MaintenancePage::updateHomeButtonState()
+{
+    homeButton_->setEnabled(
+        controllerConnected_
+        && machineMode_ == MachineMode::Maintenance
+        && motionState_ == 0
+        && !homeRunning_
+        && !homeCommandRequested_);
 }

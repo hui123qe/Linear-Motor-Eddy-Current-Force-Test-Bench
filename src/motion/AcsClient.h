@@ -25,6 +25,8 @@ struct AcsMotionStatus
     int state = 0;
     int errorCode = 0;
     int currentCount = 0;
+    bool homeDone = false;
+    bool homeRunning = false;
     bool axisEnabled = false;
     double feedbackPositionMillimeters = 0.0;
     double feedbackVelocityMillimetersPerSecond = 0.0;
@@ -34,7 +36,7 @@ enum class MaintenanceCommand
 {
     EnableAxis,
     DisableAxis,
-    MoveToZero,
+    HomeAxis,
     RelativeMove,
     AbsoluteMove,
     StartJog,
@@ -62,10 +64,11 @@ public:
 public slots:
     void connectController();
     void disconnectController();
+    void rebootController();
     void tareForceSensor();
     void enableAxis();
     void disableAxis();
-    void moveToZero(double velocityMillimetersPerSecond);
+    void homeAxis();
     void moveRelative(double distanceMillimeters,
                       double velocityMillimetersPerSecond);
     void moveAbsolute(double positionMillimeters,
@@ -80,6 +83,8 @@ public slots:
 
 signals:
     void connectionChanged(bool connected, const QString& message);
+    void controllerRebootCompleted();
+    void controllerRebootFailed(const QString& message);
     void statusChanged(const AcsMotionStatus& status);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
     void forceTareWritten();

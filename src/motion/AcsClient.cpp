@@ -27,6 +27,8 @@ constexpr int kMinimumPollIntervalMilliseconds = 10;
 constexpr int kMaximumPollIntervalMilliseconds = 5000;
 constexpr int kSensorPollIntervalMilliseconds = 200;
 constexpr int kErrorBufferSize = 512;
+constexpr int kHomingBuffer = 7;
+constexpr int kControllerRebootTimeoutMilliseconds = 30000;
 
 const std::array<const char*, kAcquisitionBlockCount> kCollectionBlockVariables = {
     "DC_Data_1",
@@ -214,34 +216,66 @@ void AcsClient::disableAxis()
     emit maintenanceCommandCompleted(MaintenanceCommand::DisableAxis);
 }
 
-void AcsClient::moveToZero(double velocityMillimetersPerSecond)
+void AcsClient::homeAxis()
 {
     if (controllerHandle_ == ACSC_INVALID) {
         emit maintenanceCommandFailed(
-            MaintenanceCommand::MoveToZero,
+            MaintenanceCommand::HomeAxis,
             QStringLiteral("ACS 控制器未连接，不能执行回零。"));
         return;
     }
 
-    double zeroPosition = 0.0;
-    QString errorMessage;
-    if (!readReal(AcsVariableNames::zeroPosition,
-                  &zeroPosition,
-                  &errorMessage)) {
-        qCWarning(logMotion).noquote() << errorMessage;
+    qCInfo(logMotion)
+        << "提交维修命令：回零，buffer=" << kHomingBuffer;
+    if (acsc_RunBuffer(static_cast<HANDLE>(controllerHandle_),
+                       kHomingBuffer,
+                       nullptr,
+                       ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(
+            QStringLiteral("启动 ACS Buffer %1 回零程序失败")
+                .arg(kHomingBuffer));
+        qCWarning(logMotion).noquote() << message;
         emit maintenanceCommandFailed(
-            MaintenanceCommand::MoveToZero, errorMessage);
+            MaintenanceCommand::HomeAxis, message);
         return;
     }
 
-    qCInfo(logMotion)
-        << "提交维修命令：移动到零点，axis=" << axis_
-        << "targetControllerUnits=" << zeroPosition
-        << "velocityMmPerSecond=" << velocityMillimetersPerSecond;
-    executePointMotion(MaintenanceCommand::MoveToZero,
-                       0,
-                       zeroPosition,
-                       velocityMillimetersPerSecond);
+    emit maintenanceCommandCompleted(MaintenanceCommand::HomeAxis);
+}
+
+void AcsClient::rebootController()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit controllerRebootFailed(
+            QStringLiteral("ACS 控制器未连接，不能执行复位。"));
+        return;
+    }
+
+    qCWarning(logMotion)
+        << "即将重启 ACS 控制器，timeoutMs="
+        << kControllerRebootTimeoutMilliseconds;
+    pollTimer_->stop();
+    sensorPollTimer_->stop();
+    const int rebootResult = acsc_ControllerReboot(
+        static_cast<HANDLE>(controllerHandle_),
+        kControllerRebootTimeoutMilliseconds);
+    const QString resultMessage = rebootResult != 0
+                                      ? QStringLiteral(
+                                            "ACS 控制器已重启，请重新连接并执行回零。")
+                                      : sdkError(
+                                            QStringLiteral("ACS 控制器重启失败"));
+
+    closeConnection();
+    emit connectionChanged(false, resultMessage);
+    if (rebootResult == 0) {
+        qCCritical(logMotion).noquote() << resultMessage;
+        emit controllerRebootFailed(resultMessage);
+        return;
+    }
+
+    qCInfo(logMotion).noquote() << resultMessage;
+    emit controllerRebootCompleted();
 }
 
 void AcsClient::moveRelative(double distanceMillimeters,
@@ -766,13 +800,23 @@ void AcsClient::pollStatus()
     }
 
     AcsMotionStatus status;
+    int homeDone = 0;
+    int homeRunning = 0;
     QString errorMessage;
     if (!readInteger("G_STATE", &status.state, &errorMessage)
         || !readInteger("G_ERROR_CODE", &status.errorCode, &errorMessage)
-        || !readInteger("G_CURRENT_COUNT", &status.currentCount, &errorMessage)) {
+        || !readInteger("G_CURRENT_COUNT", &status.currentCount, &errorMessage)
+        || !readInteger(AcsVariableNames::homeDone,
+                        &homeDone,
+                        &errorMessage)
+        || !readInteger(AcsVariableNames::homeRunning,
+                        &homeRunning,
+                        &errorMessage)) {
         handleCommunicationFailure(errorMessage);
         return;
     }
+    status.homeDone = homeDone == 1;
+    status.homeRunning = homeRunning == 1;
 
     int motorState = 0;
     double feedbackPosition = 0.0;

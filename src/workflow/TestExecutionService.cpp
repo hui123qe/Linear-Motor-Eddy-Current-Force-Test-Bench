@@ -800,6 +800,16 @@ bool TestExecutionService::validateStartPrerequisites(
                      : controllerStatusMessage_);
         return false;
     }
+    if (MotionControlService::instance().homeRunning()) {
+        setError(errorMessage,
+                 QStringLiteral("机器正在回零，不能启动测试。"));
+        return false;
+    }
+    if (!MotionControlService::instance().homeDone()) {
+        setError(errorMessage,
+                 QStringLiteral("机器尚未完成回零，请先在维修模式下执行回零。"));
+        return false;
+    }
     if (isFaultMotionState(motionState_)) {
         setError(errorMessage,
                  QStringLiteral("运动控制器处于故障状态 %1。")

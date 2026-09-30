@@ -1,5 +1,5 @@
-#/ Controller version = 4.20.01
-#/ Date = 9/29/2026 9:13 AM
+#/ Controller version = 4.20
+#/ Date = 9/29/2026 8:17 PM
 #/ User remarks = 
 #1
 !PNAME=
@@ -96,6 +96,7 @@ STOP
 !   4. 上位机读取 G_STATE、G_CURRENT_COUNT、G_ERROR_CODE
 !
 !======================================================================
+AUTOEXEC:
 
 
 !======================================================================
@@ -541,7 +542,7 @@ GOTO WAIT_START
 ! Start Buffer #2 only once.
 ! Use DCSTART_CON to start or stop collection repeatedly.
 !============================================================
-
+AUTOEXEC:
 
 DCCOUNT = 0
 DCSTART_CON = 0
@@ -997,6 +998,57 @@ Y1Y2_CORRECTION_MAP(26)=        0         ;
 ERRORUNMAP 0, Y_Zone
 ERRORMAP1D 0, Y_Zone, Y_Base, Y_Increment, Y1Y2_CORRECTION_MAP
 ERRORMAPON 0, Y_Zone
+
+STOP
+#7
+!PNAME=Home
+!PDESC=
+! ==========================================
+! Buffer ：总回零
+! 正常运行此Buffer，从第一行开始
+! ==========================================
+GLOBAL INT HomeDone
+GLOBAL INT HomeRunning
+
+
+
+! 防止重复启动
+IF PST(5).#RUN | PST(6).#RUN
+    DISP "Homing buffer is already running!"
+    STOP
+END
+
+
+! ---------- 开始回零 ----------
+
+
+HomeDone = 0
+HomeRunning = 1
+
+! ---------- 连续启动，两组并发执行 ----------
+DISP "Start both homing buffers."
+
+START 5, 1
+START 6, 1
+
+
+! ---------- 等待两个程序都结束 ----------
+TILL (PST(5).#RUN = 0) & (PST(6).#RUN = 0)
+
+! ---------- 全部成功 ----------
+HomeDone = 1
+HomeRunning = 0
+
+STOP
+
+
+
+! ---------- 上电初始化 ----------
+AUTOEXEC:
+
+HomeDone = 0
+HomeRunning = 0
+
 
 STOP
 #A

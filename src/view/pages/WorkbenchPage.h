@@ -32,6 +32,8 @@ public slots:
     void setConfigurationLocked(bool locked);
     void setControllerConnected(bool connected, const QString& message);
     void setMotionState(int state, int errorCode);
+    void setHomeDone(bool done);
+    void setHomeRunning(bool running);
     void setDisplacement(double positionMillimeters);
     void setMotionCommandPending(bool pending);
     void appendForcePositionSamples(const QVector<QPointF>& samples);
@@ -44,6 +46,8 @@ public slots:
 private slots:
     void onStartButtonClicked();
     void onStopButtonClicked();
+    void onHomeButtonClicked();
+    void onResetButtonClicked();
     void beginChartCollection();
     void commitChartCollection();
 
@@ -55,6 +59,8 @@ private:
     void initializeConnections();
     void beginTest(const TestResultTargets& targets);
     void stopTest();
+    void updateControlButtons();
+    void updateMotionStateDisplay();
 
     TestResultService resultService_;
     std::optional<TestParameters> configuration_;
@@ -74,11 +80,18 @@ private:
     MetricCard* displacementCard_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
+    QPushButton* homeButton_ = nullptr;
+    QPushButton* resetButton_ = nullptr;
     bool configurationLocked_ = false;
     bool controllerConnected_ = false;
     bool motionCommandPending_ = false;
+    bool homeCommandRequested_ = false;
+    bool resetCommandRequested_ = false;
+    bool homeDone_ = false;
+    bool homeRunning_ = false;
     bool chartCollectionActive_ = false;
     int motionState_ = 0;
+    int motionErrorCode_ = 0;
     qint64 activeExecutionId_ = 0;
     QVector<QPointF> pendingChartSamples_;
 };
