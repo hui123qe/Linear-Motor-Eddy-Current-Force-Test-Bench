@@ -59,7 +59,6 @@ private:
     void initializeConnections();
     void beginTest(const TestResultTargets& targets);
     void stopTest();
-    void updateControlButtons();
     void updateMotionStateDisplay();
 
     TestResultService resultService_;

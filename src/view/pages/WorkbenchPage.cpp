@@ -166,7 +166,6 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
     initializePrimaryArea(pageLayout);
     initializeLowerArea(pageLayout);
     initializeConnections();
-    updateControlButtons();
     updateMotionStateDisplay();
 }
 
@@ -379,7 +378,6 @@ void WorkbenchPage::initializeConnections()
                 if (command == MaintenanceCommand::HomeAxis
                     && homeCommandRequested_) {
                     homeCommandRequested_ = false;
-                    updateControlButtons();
                 }
             });
     connect(&motionControlService,
@@ -391,7 +389,6 @@ void WorkbenchPage::initializeConnections()
                     return;
                 }
                 homeCommandRequested_ = false;
-                updateControlButtons();
                 QMessageBox::warning(
                     this, QStringLiteral("回零失败"), message);
             });
@@ -403,7 +400,6 @@ void WorkbenchPage::initializeConnections()
                     return;
                 }
                 resetCommandRequested_ = false;
-                updateControlButtons();
                 updateMotionStateDisplay();
                 QMessageBox::information(
                     this,
@@ -419,7 +415,6 @@ void WorkbenchPage::initializeConnections()
                     return;
                 }
                 resetCommandRequested_ = false;
-                updateControlButtons();
                 updateMotionStateDisplay();
                 QMessageBox::warning(
                     this, QStringLiteral("控制器复位失败"), message);
@@ -573,11 +568,41 @@ bool WorkbenchPage::isConfigurationLocked() const
 
 void WorkbenchPage::onStartButtonClicked()
 {
-    if (motionCommandPending_) {
+    if (motionCommandPending_ || homeCommandRequested_
+        || resetCommandRequested_) {
         QMessageBox::warning(
             this,
             QStringLiteral("启动测试失败"),
             QStringLiteral("控制命令正在处理中，请稍后再试。"));
+        return;
+    }
+    if (!controllerConnected_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("ACS 控制器未连接。"));
+        return;
+    }
+    if (homeRunning_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("机器正在回零，不能启动测试。"));
+        return;
+    }
+    if (!homeDone_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("机器尚未完成回零，不能启动测试。"));
+        return;
+    }
+    if (motionState_ != 0) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("启动测试失败"),
+            QStringLiteral("机器当前状态为 %1，只有空闲状态 0 可以启动。")
+                .arg(motionState_));
         return;
     }
     if (!configurationLocked_ || !configuration_.has_value()) {
@@ -611,6 +636,37 @@ void WorkbenchPage::onStopButtonClicked()
 
 void WorkbenchPage::onHomeButtonClicked()
 {
+    if (motionCommandPending_ || homeCommandRequested_
+        || resetCommandRequested_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("回零失败"),
+            QStringLiteral("控制命令正在处理中，请稍后再试。"));
+        return;
+    }
+    if (!controllerConnected_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("回零失败"),
+            QStringLiteral("ACS 控制器未连接。"));
+        return;
+    }
+    if (homeRunning_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("回零失败"),
+            QStringLiteral("机器正在回零。"));
+        return;
+    }
+    if (motionState_ != 0) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("回零失败"),
+            QStringLiteral("机器当前状态为 %1，不能回零。")
+                .arg(motionState_));
+        return;
+    }
+
     QString errorMessage;
     if (!MotionControlService::instance().homeAxis(&errorMessage)) {
         QMessageBox::warning(
@@ -619,11 +675,41 @@ void WorkbenchPage::onHomeButtonClicked()
     }
 
     homeCommandRequested_ = true;
-    updateControlButtons();
 }
 
 void WorkbenchPage::onResetButtonClicked()
 {
+    if (motionCommandPending_ || homeCommandRequested_
+        || resetCommandRequested_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("控制器复位失败"),
+            QStringLiteral("控制命令正在处理中，请稍后再试。"));
+        return;
+    }
+    if (!controllerConnected_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("控制器复位失败"),
+            QStringLiteral("ACS 控制器未连接。"));
+        return;
+    }
+    if (homeRunning_) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("控制器复位失败"),
+            QStringLiteral("机器正在回零，不能复位控制器。"));
+        return;
+    }
+    if (motionState_ != 0) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("控制器复位失败"),
+            QStringLiteral("机器当前状态为 %1，不能复位控制器。")
+                .arg(motionState_));
+        return;
+    }
+
     const QMessageBox::StandardButton confirmation = QMessageBox::question(
         this,
         QStringLiteral("确认复位控制器"),
@@ -645,7 +731,6 @@ void WorkbenchPage::onResetButtonClicked()
     }
 
     resetCommandRequested_ = true;
-    updateControlButtons();
     updateMotionStateDisplay();
 }
 
@@ -686,7 +771,6 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
         displacementCard_->setValue(QStringLiteral("-- mm"));
         chartWidget_->start(false);
     }
-    updateControlButtons();
     updateMotionStateDisplay();
 }
 
@@ -699,7 +783,6 @@ void WorkbenchPage::setMotionState(int state, int errorCode)
         motionCommandPending_ = false;
     }
 
-    updateControlButtons();
     updateMotionStateDisplay();
     chartWidget_->start(controllerConnected_ && (state == 50 || state == 70));
 }
@@ -707,13 +790,11 @@ void WorkbenchPage::setMotionState(int state, int errorCode)
 void WorkbenchPage::setHomeDone(bool done)
 {
     homeDone_ = done;
-    updateControlButtons();
 }
 
 void WorkbenchPage::setHomeRunning(bool running)
 {
     homeRunning_ = running;
-    updateControlButtons();
     updateMotionStateDisplay();
 }
 
@@ -729,24 +810,6 @@ void WorkbenchPage::setDisplacement(double positionMillimeters)
 void WorkbenchPage::setMotionCommandPending(bool pending)
 {
     motionCommandPending_ = pending;
-    updateControlButtons();
-}
-
-void WorkbenchPage::updateControlButtons()
-{
-    const bool motionActive = isActiveMotionState(motionState_);
-    const bool controlCommandPending = motionCommandPending_
-                                       || homeCommandRequested_
-                                       || resetCommandRequested_;
-    const bool controlIdle = !controlCommandPending && !motionActive;
-    startButton_->setEnabled(
-        controllerConnected_ && controlIdle && homeDone_ && !homeRunning_);
-    homeButton_->setEnabled(
-        controllerConnected_ && controlIdle && motionState_ == 0
-        && !homeRunning_ && !homeCommandRequested_);
-    resetButton_->setEnabled(
-        controllerConnected_ && controlIdle && motionState_ == 0
-        && !homeRunning_);
 }
 
 void WorkbenchPage::updateMotionStateDisplay()
