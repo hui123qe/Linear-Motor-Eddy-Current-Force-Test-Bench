@@ -1,5 +1,5 @@
 #/ Controller version = 4.20
-#/ Date = 9/30/2026 9:10 AM
+#/ Date = 9/30/2026 12:55 PM
 #/ User remarks = 
 #1
 !PNAME=
@@ -297,6 +297,11 @@ JERK(X) = L_POSITION_JERK
 !   才继续执行下一条程序。
 !
 PTP/e X, L_ZERO_POS
+
+
+! 启动 Buffer 去皮
+START 8, 1
+TILL (PST(8).#RUN = 0)
 
 
 ! 如果运动过程中 Buffer 11 收到了停止请求，
