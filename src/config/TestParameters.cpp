@@ -113,16 +113,6 @@ bool validateValues(const TestParameters& parameters, QString* errorMessage)
         setError(errorMessage, QStringLiteral("重复次数必须在 1 到 999 之间。"));
         return false;
     }
-    if (parameters.ratedSpeedTest.accelerationStartMeters
-            != kStandardAccelerationStartMeters
-        || parameters.ratedSpeedTest.accelerationDistanceMeters
-               != kStandardAccelerationDistanceMeters
-        || parameters.ratedSpeedTest.endPositionMeters
-               != kStandardEndPositionMeters) {
-        setError(errorMessage,
-                 QStringLiteral("标准件测试的开始位置、加减速距离和结束位置必须使用固定值。"));
-        return false;
-    }
     if (!std::isfinite(parameters.ratedSpeedTest.acquisitionStartMeters)
         || !std::isfinite(parameters.ratedSpeedTest.acquisitionEndMeters)
         || !std::isfinite(parameters.variableSpeedTest.acquisitionStartMeters)
@@ -322,11 +312,6 @@ bool fromJson(const QJsonObject& root, TestParameters* parameters, QString* erro
         return false;
     }
 
-    parsed.ratedSpeedTest.accelerationStartMeters =
-        kStandardAccelerationStartMeters;
-    parsed.ratedSpeedTest.accelerationDistanceMeters =
-        kStandardAccelerationDistanceMeters;
-    parsed.ratedSpeedTest.endPositionMeters = kStandardEndPositionMeters;
     if (!validateValues(parsed, errorMessage)) {
         return false;
     }

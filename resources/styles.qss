@@ -312,6 +312,22 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #167486;
 }
 
+QDoubleSpinBox[jsonReadOnly="true"] {
+    color: #173c44;
+    background: #e3eeec;
+    border: 1px solid #8ba9a4;
+    border-left: 4px solid #167486;
+    padding: 7px 10px;
+    font-weight: 800;
+}
+
+QDoubleSpinBox[jsonReadOnly="true"]:disabled {
+    color: #526a70;
+    background: #e8efee;
+    border-color: #adc0bd;
+    border-left-color: #6f969d;
+}
+
 #fieldLabel, #sectionCaption {
     color: #405a62;
     font-size: 13px;

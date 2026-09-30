@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 3,
+    "schemaVersion": 4,
     "selectedTestType": "ratedSpeed",
     "batch": {
         "motorModel": "HIT-HSM-02",
@@ -10,12 +10,16 @@
         "accelerationStartMeters": 0.0,
         "accelerationDistanceMeters": 0.5,
         "endPositionMeters": 1.7,
-        "speedMetersPerSecond": 3.0
+        "speedMetersPerSecond": 3.0,
+        "acquisitionStartMeters": 0.5,
+        "acquisitionEndMeters": 1.2
     },
     "variableSpeedTest": {
         "accelerationStartMeters": 0.0,
         "accelerationDistanceMeters": 0.5,
         "endPositionMeters": 1.7,
-        "speedMetersPerSecond": 3.0
+        "speedMetersPerSecond": 3.0,
+        "acquisitionStartMeters": 0.5,
+        "acquisitionEndMeters": 1.2
     }
 }

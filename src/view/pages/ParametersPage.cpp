@@ -5,6 +5,7 @@
 #include "../widgets/StatusPill.h"
 #include "../widgets/ViewHelpers.h"
 
+#include <QAbstractSpinBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -48,6 +49,16 @@ QSpinBox* makeRepeatInput()
     input->setValue(1);
     input->setSuffix(QStringLiteral(" 次"));
     return input;
+}
+
+void configureJsonReadOnlyInput(QDoubleSpinBox* input)
+{
+    input->setReadOnly(true);
+    input->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    input->setFocusPolicy(Qt::NoFocus);
+    input->setProperty("jsonReadOnly", true);
+    input->setToolTip(
+        QStringLiteral("由 parameters.json 配置，界面只读。"));
 }
 
 QFrame* makeConstraintBox(const QString& title,
@@ -197,23 +208,23 @@ QWidget* ParametersPage::createStandardSpecimenPage()
 
     auto* ratedFormPanel = ViewHelpers::makePanel(
         QStringLiteral("标准件涡流力测试"),
-        QStringLiteral("标准运动范围固定，可设置速度与采集位置"));
+        QStringLiteral("运动范围由 JSON 配置，可设置速度与采集位置"));
     auto* ratedFormLayout = qobject_cast<QVBoxLayout*>(ratedFormPanel->layout());
     auto* ratedForm = new QFormLayout;
     ratedForm->setHorizontalSpacing(28);
     ratedForm->setVerticalSpacing(14);
     ratedAccelerationStartInput_ =
-        makeDoubleInput(kStandardAccelerationStartMeters,
+        makeDoubleInput(kDefaultAccelerationStartMeters,
                         -1000.0,
                         1000.0,
                         QStringLiteral("m"));
     ratedAccelerationDistanceInput_ =
-        makeDoubleInput(kStandardAccelerationDistanceMeters,
+        makeDoubleInput(kDefaultAccelerationDistanceMeters,
                         0.001,
                         1000.0,
                         QStringLiteral("m"));
     ratedEndPositionInput_ =
-        makeDoubleInput(kStandardEndPositionMeters,
+        makeDoubleInput(kDefaultEndPositionMeters,
                         -1000.0,
                         1000.0,
                         QStringLiteral("m"));
@@ -229,9 +240,9 @@ QWidget* ParametersPage::createStandardSpecimenPage()
         -1000.0,
         1000.0,
         QStringLiteral("m"));
-    ratedAccelerationStartInput_->setEnabled(false);
-    ratedAccelerationDistanceInput_->setEnabled(false);
-    ratedEndPositionInput_->setEnabled(false);
+    configureJsonReadOnlyInput(ratedAccelerationStartInput_);
+    configureJsonReadOnlyInput(ratedAccelerationDistanceInput_);
+    configureJsonReadOnlyInput(ratedEndPositionInput_);
     ratedForm->addRow(QStringLiteral("开始位置"), ratedAccelerationStartInput_);
     ratedForm->addRow(QStringLiteral("加减速距离"), ratedAccelerationDistanceInput_);
     ratedForm->addRow(QStringLiteral("结束位置"), ratedEndPositionInput_);
@@ -264,7 +275,7 @@ QWidget* ParametersPage::createStandardSpecimenPage()
         QStringLiteral("读写限制与执行约束"),
         {QStringLiteral("最大速度：5 m/s。"),
          QStringLiteral("最大加速度/减速度：25 m/s2。"),
-         QStringLiteral("标准件开始位置、加减速距离和结束位置固定。"),
+         QStringLiteral("标准件开始位置、加减速距离和结束位置由 parameters.json 配置，界面只读。"),
          QStringLiteral("对称加减速：加速度 = 减速度 = v^2 / (2 x 加速距离)。"),
          QStringLiteral("采集位置仅保存设置，不参与运动参数约束。")},
         QStringLiteral("ok"));
@@ -498,9 +509,12 @@ void ParametersPage::setConfiguration(const TestParameters& parameters)
     motorModelInput_->setText(parameters.motorModel);
     specimenIdInput_->setText(parameters.specimenId);
     repeatCountInput_->setValue(parameters.repeatCount);
-    ratedAccelerationStartInput_->setValue(kStandardAccelerationStartMeters);
-    ratedAccelerationDistanceInput_->setValue(kStandardAccelerationDistanceMeters);
-    ratedEndPositionInput_->setValue(kStandardEndPositionMeters);
+    ratedAccelerationStartInput_->setValue(
+        parameters.ratedSpeedTest.accelerationStartMeters);
+    ratedAccelerationDistanceInput_->setValue(
+        parameters.ratedSpeedTest.accelerationDistanceMeters);
+    ratedEndPositionInput_->setValue(
+        parameters.ratedSpeedTest.endPositionMeters);
     ratedSpeedInput_->setValue(parameters.ratedSpeedTest.speedMetersPerSecond);
     ratedAcquisitionStartInput_->setValue(
         parameters.ratedSpeedTest.acquisitionStartMeters);

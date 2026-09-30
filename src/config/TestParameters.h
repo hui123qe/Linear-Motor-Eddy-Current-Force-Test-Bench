@@ -12,17 +12,17 @@ enum class EddyCurrentTestType
 
 inline constexpr double kMaximumTestSpeedMetersPerSecond = 5.0;
 inline constexpr double kMaximumTestAccelerationMetersPerSecondSquared = 25.0;
-inline constexpr double kStandardAccelerationStartMeters = 0.0;
-inline constexpr double kStandardAccelerationDistanceMeters = 0.5;
-inline constexpr double kStandardEndPositionMeters = 1.7;
+inline constexpr double kDefaultAccelerationStartMeters = 0.0;
+inline constexpr double kDefaultAccelerationDistanceMeters = 0.5;
+inline constexpr double kDefaultEndPositionMeters = 1.7;
 inline constexpr double kDefaultAcquisitionStartMeters = 0.5;
 inline constexpr double kDefaultAcquisitionEndMeters = 1.2;
 
 struct TestMotionParameters
 {
-    double accelerationStartMeters = kStandardAccelerationStartMeters;
-    double accelerationDistanceMeters = kStandardAccelerationDistanceMeters;
-    double endPositionMeters = kStandardEndPositionMeters;
+    double accelerationStartMeters = kDefaultAccelerationStartMeters;
+    double accelerationDistanceMeters = kDefaultAccelerationDistanceMeters;
+    double endPositionMeters = kDefaultEndPositionMeters;
     double speedMetersPerSecond = 3.0;
     double acquisitionStartMeters = kDefaultAcquisitionStartMeters;
     double acquisitionEndMeters = kDefaultAcquisitionEndMeters;
