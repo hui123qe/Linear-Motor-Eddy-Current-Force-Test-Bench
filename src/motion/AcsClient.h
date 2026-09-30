@@ -65,6 +65,7 @@ public slots:
     void connectController();
     void disconnectController();
     void rebootController();
+    void emergencyStop();
     void tareForceSensor();
     void enableAxis();
     void disableAxis();
@@ -85,6 +86,8 @@ signals:
     void connectionChanged(bool connected, const QString& message);
     void controllerRebootCompleted();
     void controllerRebootFailed(const QString& message);
+    void emergencyStopCompleted();
+    void emergencyStopFailed(const QString& message);
     void statusChanged(const AcsMotionStatus& status);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
     void forceTareStarted();

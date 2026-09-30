@@ -186,6 +186,18 @@ TestExecutionService::TestExecutionService()
             [this](const QString& message) {
                 failExecution(message, true);
             });
+    connect(&motionService,
+            &MotionControlService::emergencyStopCompleted,
+            this,
+            [this] {
+                failExecution(QStringLiteral("软件急停已触发。"), true);
+            });
+    connect(&motionService,
+            &MotionControlService::emergencyStopFailed,
+            this,
+            [this](const QString& message) {
+                failExecution(message, true);
+            });
 }
 
 TestExecutionService::~TestExecutionService()

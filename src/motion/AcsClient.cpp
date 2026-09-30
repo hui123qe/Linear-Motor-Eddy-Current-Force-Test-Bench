@@ -146,6 +146,29 @@ void AcsClient::disconnectController()
     }
 }
 
+void AcsClient::emergencyStop()
+{
+    if (controllerHandle_ == ACSC_INVALID) {
+        const QString message =
+            QStringLiteral("ACS 控制器未连接，不能执行软件急停。");
+        qCCritical(logMotion).noquote() << message;
+        emit emergencyStopFailed(message);
+        return;
+    }
+
+    qCCritical(logMotion) << "执行软件急停：ACS Kill All";
+    if (acsc_KillAll(static_cast<HANDLE>(controllerHandle_),
+                     ACSC_SYNCHRONOUS)
+        == 0) {
+        const QString message = sdkError(QStringLiteral("ACS Kill All 软件急停失败"));
+        qCCritical(logMotion).noquote() << message;
+        emit emergencyStopFailed(message);
+        return;
+    }
+
+    emit emergencyStopCompleted();
+}
+
 void AcsClient::tareForceSensor()
 {
     if (controllerHandle_ == ACSC_INVALID) {

@@ -31,6 +31,7 @@ public:
     void connectController();
     [[nodiscard]] bool disconnectController(QString* errorMessage = nullptr);
     [[nodiscard]] bool resetController(QString* errorMessage = nullptr);
+    [[nodiscard]] bool emergencyStop(QString* errorMessage = nullptr);
     void tareForceSensor();
     [[nodiscard]] MachineMode machineMode() const;
     [[nodiscard]] bool setMachineMode(MachineMode mode,
@@ -57,6 +58,8 @@ signals:
     void connectionChanged(bool connected, const QString& message);
     void controllerResetCompleted();
     void controllerResetFailed(const QString& message);
+    void emergencyStopCompleted();
+    void emergencyStopFailed(const QString& message);
     void motionStateChanged(int state, int errorCode);
     void recordProcessingEntered(int state);
     void completedRecordCountChanged(int completedCount);

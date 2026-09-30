@@ -125,6 +125,18 @@ MotionControlService::MotionControlService()
                 emit controllerResetFailed(message);
             });
     connect(client_,
+            &AcsClient::emergencyStopCompleted,
+            this,
+            [this] {
+                maintenanceCommandPending_ = false;
+                forceTarePending_ = false;
+                emit emergencyStopCompleted();
+            });
+    connect(client_,
+            &AcsClient::emergencyStopFailed,
+            this,
+            &MotionControlService::emergencyStopFailed);
+    connect(client_,
             &AcsClient::forceTareStarted,
             this,
             [this] {
@@ -244,6 +256,25 @@ bool MotionControlService::disconnectController(QString* errorMessage)
     qCInfo(logMotion) << "请求断开 ACS 控制器";
     QMetaObject::invokeMethod(
         client_, &AcsClient::disconnectController, Qt::QueuedConnection);
+    return true;
+}
+
+bool MotionControlService::emergencyStop(QString* errorMessage)
+{
+    if (!workerThread_.isRunning()) {
+        setError(errorMessage,
+                 QStringLiteral("ACS 电机服务尚未初始化，不能执行软件急停。"));
+        return false;
+    }
+    if (!connected_) {
+        setError(errorMessage,
+                 QStringLiteral("ACS 控制器未连接，不能执行软件急停。"));
+        return false;
+    }
+
+    qCCritical(logMotion) << "请求执行软件急停：ACS Kill All";
+    QMetaObject::invokeMethod(
+        client_, &AcsClient::emergencyStop, Qt::QueuedConnection);
     return true;
 }
 
