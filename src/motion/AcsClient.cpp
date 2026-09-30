@@ -29,7 +29,7 @@ constexpr int kSensorPollIntervalMilliseconds = 200;
 constexpr int kErrorBufferSize = 512;
 constexpr int kHomingBuffer = 7;
 constexpr int kForceTareBuffer = 8;
-constexpr int kControllerRebootTimeoutMilliseconds = 30000;
+constexpr std::array<int, 3> kResetBuffers = {1, 2, 3};
 
 const std::array<const char*, kAcquisitionBlockCount> kCollectionBlockVariables = {
     "DC_Data_1",
@@ -271,38 +271,41 @@ void AcsClient::homeAxis()
     emit maintenanceCommandCompleted(MaintenanceCommand::HomeAxis);
 }
 
-void AcsClient::rebootController()
+void AcsClient::restartControlBuffers()
 {
     if (controllerHandle_ == ACSC_INVALID) {
-        emit controllerRebootFailed(
+        emit controlBuffersRestartFailed(
             QStringLiteral("ACS 控制器未连接，不能执行复位。"));
         return;
     }
 
-    qCWarning(logMotion)
-        << "即将重启 ACS 控制器，timeoutMs="
-        << kControllerRebootTimeoutMilliseconds;
-    pollTimer_->stop();
-    sensorPollTimer_->stop();
-    const int rebootResult = acsc_ControllerReboot(
-        static_cast<HANDLE>(controllerHandle_),
-        kControllerRebootTimeoutMilliseconds);
-    const QString resultMessage = rebootResult != 0
-                                      ? QStringLiteral(
-                                            "ACS 控制器已重启，请重新连接并执行回零。")
-                                      : sdkError(
-                                            QStringLiteral("ACS 控制器重启失败"));
-
-    closeConnection();
-    emit connectionChanged(false, resultMessage);
-    if (rebootResult == 0) {
-        qCCritical(logMotion).noquote() << resultMessage;
-        emit controllerRebootFailed(resultMessage);
-        return;
+    // 在同一工作线程中同步完成停止、启动，期间轮询不会插入。
+    const HANDLE handle = static_cast<HANDLE>(controllerHandle_);
+    for (const int buffer : kResetBuffers) {
+        qCInfo(logMotion) << "复位：停止 ACS Buffer" << buffer;
+        if (acsc_StopBuffer(handle, buffer, ACSC_SYNCHRONOUS) == 0) {
+            const QString message = sdkError(
+                QStringLiteral("复位失败：停止 ACS Buffer %1 失败，部分程序可能已停止。")
+                    .arg(buffer));
+            qCCritical(logMotion).noquote() << message;
+            emit controlBuffersRestartFailed(message);
+            return;
+        }
+    }
+    for (const int buffer : kResetBuffers) {
+        qCInfo(logMotion) << "复位：启动 ACS Buffer" << buffer;
+        if (acsc_RunBuffer(handle, buffer, nullptr, ACSC_SYNCHRONOUS) == 0) {
+            const QString message = sdkError(
+                QStringLiteral("复位失败：启动 ACS Buffer %1 失败，程序尚未全部恢复运行。")
+                    .arg(buffer));
+            qCCritical(logMotion).noquote() << message;
+            emit controlBuffersRestartFailed(message);
+            return;
+        }
     }
 
-    qCInfo(logMotion).noquote() << resultMessage;
-    emit controllerRebootCompleted();
+    qCInfo(logMotion) << "复位完成：ACS Buffer 1、2、3 已重新启动";
+    emit controlBuffersRestartCompleted();
 }
 
 void AcsClient::moveRelative(double distanceMillimeters,

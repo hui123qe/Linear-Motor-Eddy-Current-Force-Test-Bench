@@ -405,7 +405,7 @@ void WorkbenchPage::initializeConnections()
                     this,
                     QStringLiteral("控制器复位"),
                     QStringLiteral(
-                        "ACS 控制器已重启，请重新连接并执行回零。"));
+                        "复位完成，ACS Buffer 1、2、3 已重新启动。"));
             });
     connect(&motionControlService,
             &MotionControlService::controllerResetFailed,
@@ -714,8 +714,7 @@ void WorkbenchPage::onResetButtonClicked()
         this,
         QStringLiteral("确认复位控制器"),
         QStringLiteral(
-            "复位将重启 ACS 控制器并中断当前连接。\n"
-            "重启后必须重新连接并执行回零。\n\n"
+            "复位将停止并重新启动 ACS Buffer 1、2、3。\n\n"
             "确定继续吗？"),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);

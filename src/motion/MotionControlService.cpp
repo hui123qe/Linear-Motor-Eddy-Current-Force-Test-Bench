@@ -111,14 +111,14 @@ MotionControlService::MotionControlService()
             this,
             &MotionControlService::sensorReadingsChanged);
     connect(client_,
-            &AcsClient::controllerRebootCompleted,
+            &AcsClient::controlBuffersRestartCompleted,
             this,
             [this] {
                 maintenanceCommandPending_ = false;
                 emit controllerResetCompleted();
             });
     connect(client_,
-            &AcsClient::controllerRebootFailed,
+            &AcsClient::controlBuffersRestartFailed,
             this,
             [this](const QString& message) {
                 maintenanceCommandPending_ = false;
@@ -548,10 +548,10 @@ bool MotionControlService::resetController(QString* errorMessage)
         return false;
     }
 
-    qCWarning(logMotion) << "接受 ACS 控制器复位请求";
+    qCWarning(logMotion) << "接受 ACS 复位请求：重启 Buffer 1、2、3";
     maintenanceCommandPending_ = true;
     QMetaObject::invokeMethod(
-        client_, &AcsClient::rebootController, Qt::QueuedConnection);
+        client_, &AcsClient::restartControlBuffers, Qt::QueuedConnection);
     return true;
 }
 

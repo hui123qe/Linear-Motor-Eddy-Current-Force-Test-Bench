@@ -1,5 +1,5 @@
-#/ Controller version = 4.20
-#/ Date = 9/30/2026 12:55 PM
+#/ Controller version = 4.20.01
+#/ Date = 9/30/2026 6:11 PM
 #/ User remarks = 
 #1
 !PNAME=
@@ -11,6 +11,9 @@ TILL ECST.#OP = 1
 
 EC_DOUT3.4=0!力传感器去皮
 ECOUT(208,EC_DOUT3)
+
+
+ECIN(210,EC_AIN9)
 
 
 
@@ -72,8 +75,8 @@ Side1_FLowA=EC_AIN3*2.5!侧边流量计1，单位L/min
 Side2_FLowA=EC_AIN4*2.5!侧边流量计1，单位L/min
 Down_FLowA=EC_AIN5*2.5!底部流量计1，单位L/min
 !力传感器输入
-ECIN(210,EC_AIN9)
-Froce_Sensor=EC_AIN9
+
+!Froce_Sensor=EC_AIN9
 
 end
 STOP
@@ -649,23 +652,23 @@ WHILE 1
         ! Start data collection into the selected block
         IF DCCOUNT = 1
 
-            DC DC_Data_1, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
+            DC DC_Data_1, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         ELSEIF DCCOUNT = 2
 
-            DC DC_Data_2, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
+            DC DC_Data_2, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         ELSEIF DCCOUNT = 3
 
-            DC DC_Data_3, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
+            DC DC_Data_3, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         ELSEIF DCCOUNT = 4
 
-            DC DC_Data_4, ARRAYCOUNT, 1,FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
+            DC DC_Data_4, ARRAYCOUNT, 1,FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         ELSEIF DCCOUNT = 5
 
-            DC DC_Data_5, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, CURRFORCE, FPOS(X)
+            DC DC_Data_5, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         END
 
@@ -1014,7 +1017,7 @@ ERRORMAPON 0, Y_Zone
 
 STOP
 #7
-!PNAME=Home
+!PNAME=
 !PDESC=
 ! ==========================================
 ! Buffer ：总回零
@@ -1042,11 +1045,16 @@ HomeRunning = 1
 DISP "Start both homing buffers."
 
 START 5, 1
-START 6, 1
-
 
 ! ---------- 等待两个程序都结束 ----------
-TILL (PST(5).#RUN = 0) & (PST(6).#RUN = 0)
+TILL (PST(5).#RUN = 0) 
+
+
+
+!START 6, 1
+!TILL （PST(6).#RUN = 0）
+
+
 
 ! ---------- 全部成功 ----------
 HomeDone = 1
@@ -1065,7 +1073,7 @@ HomeRunning = 0
 
 STOP
 #8
-!PNAME=Tare
+!PNAME=
 !PDESC=
 
 
@@ -1101,7 +1109,7 @@ global real Froce_Sensor!力传感器读值
 !======================================================================
 ! 一、上位机写入的业务参数
 !======================================================================
-GLOBAL AXISDEF X = 0
+GLOBAL AXISDEF X = 2
 ! 槽位起始位置
 GLOBAL INT G_ABORT_LATCH
 ! 表示正式测试运动开始的位置。
@@ -1125,7 +1133,7 @@ GLOBAL REAL G_END_POS =1000
 ! 这是目标速度，并不保证一定存在匀速段。
 ! 如果起点和终点距离太短，电机可能还没有达到该速度，
 ! 就已经需要开始减速。
-GLOBAL REAL G_TEST_VEL=500
+GLOBAL REAL G_TEST_VEL=100
 
 
 ! 重复次数
@@ -1157,7 +1165,7 @@ GLOBAL REAL G_ZERO_POS=0
 
 
 ! 普通定位速度
-GLOBAL REAL G_N_VEL = 1000
+GLOBAL REAL G_N_VEL = 100
 GLOBAL REAL G_N_ACC = 1000
 GLOBAL REAL G_N_DEC = 1000
 

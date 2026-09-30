@@ -64,7 +64,7 @@ public:
 public slots:
     void connectController();
     void disconnectController();
-    void rebootController();
+    void restartControlBuffers();
     void emergencyStop();
     void tareForceSensor();
     void enableAxis();
@@ -84,8 +84,8 @@ public slots:
 
 signals:
     void connectionChanged(bool connected, const QString& message);
-    void controllerRebootCompleted();
-    void controllerRebootFailed(const QString& message);
+    void controlBuffersRestartCompleted();
+    void controlBuffersRestartFailed(const QString& message);
     void emergencyStopCompleted();
     void emergencyStopFailed(const QString& message);
     void statusChanged(const AcsMotionStatus& status);
