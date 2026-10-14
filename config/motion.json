@@ -6,7 +6,7 @@
         "port": 701
     },
     "controller": {
-        "axis": 0,
+        "axis": 2,
         "countsPerMillimeter": 1.0
     },
     "pollIntervalMs": 50
