@@ -25,7 +25,7 @@ code_refs:
 4. 控制器复位完成后机器状态回到空闲，但采集服务仍为 `Fault`，下一次启动被旧错误拒绝；
 5. 正常停止状态 `G_STATE=-2`、`G_ERROR_CODE=2001` 被流程层错误升级为机器故障。
 
-修复前基线通过 annotated tag `bug-acquisition-stop-race-ea050cd` 标记，指向提交 `ea050cd`。快速停止竞态的 Buffer 修复由 annotated tag `fix-acquisition-stop-race-20261014` 标记。两项 C++ 修复见下文，属于工作区中的其他改动，不包含在这个快速停止竞态修复提交中。同一基线还可复现停止排空时重复读取 `sequence=1` 的问题，证据和后续修复见 [LMEF-DBG-005](acquisition-duplicate-tail-block-fixed-at-ea050cd.md)。
+修复前基线通过 annotated tag `bug-acquisition-stop-race-ea050cd` 标记，指向提交 `ea050cd`。快速停止竞态的 Buffer 修复由 annotated tag `fix-acquisition-stop-race-20261014` 标记；复位后采集服务从 `Fault` 恢复的独立修复由 `fix-acquisition-reset-fault-recovery-20261014` 标记。正常停止误判的 C++ 修改仍在工作区，不包含在上述两个修复提交中。同一基线还可复现停止排空时重复读取 `sequence=1` 的问题，证据和后续修复见 [LMEF-DBG-005](acquisition-duplicate-tail-block-fixed-at-ea050cd.md)。
 
 ## 一、快速停止竞态
 
@@ -69,7 +69,7 @@ END
 
 ### 修复
 
-`DataAcquisitionService` 直接监听共享 `AcsClient` 的 `controllerResetCompleted` 信号。只有当前采集状态为 `Fault` 时才执行以下恢复：
+`DataAcquisitionService` 直接监听共享 `AcsClient` 的控制 Buffer 重启完成回执。只有当前采集状态为 `Fault` 时才执行以下恢复：
 
 - 停止残留的元数据轮询；
 - 失效停止超时计时器；
@@ -89,9 +89,10 @@ END
 
 静态检查与既有 Stage 1 结果：
 
-- 此前 C++ 工程使用 `vs2022-x64-debug` preset 编译通过；本次独立提交未重新编译；
+- 此前 C++ 工程使用 `vs2022-x64-debug` preset 编译通过；两个独立修复提交未重新编译；
 - `motorbuffer/all.prg` 的修复块位于 `DC` 启动之后、`TILL ^S_ST.#DC` 之前；
 - `bug-acquisition-stop-race-ea050cd` 指向修复前提交 `ea050cd`；`fix-acquisition-stop-race-20261014` 指向快速停止竞态的独立修复提交。
+- `fix-acquisition-reset-fault-recovery-20261014` 指向复位后采集服务恢复的独立修复提交。
 
 仍需单独确认后才能进行的 Stage 2 现场验证：
 

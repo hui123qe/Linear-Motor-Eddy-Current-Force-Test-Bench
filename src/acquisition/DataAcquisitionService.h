@@ -37,6 +37,7 @@ signals:
 private slots:
     void requestMetadata();
     void onConnectionChanged(bool connected, const QString& message);
+    void onControllerResetCompleted();
     void onCollectionControlWritten(quint64 generation, bool enabled);
     void onMetadataRead(quint64 generation, const AcsCollectionMetadata& metadata);
     void onBlockRead(quint64 generation, const AcquisitionBlock& block);

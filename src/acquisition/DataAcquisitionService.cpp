@@ -122,6 +122,10 @@ void DataAcquisitionService::initialize(AcsClient* client)
             this,
             &DataAcquisitionService::onConnectionChanged);
     connect(client_,
+            &AcsClient::controlBuffersRestartCompleted,
+            this,
+            &DataAcquisitionService::onControllerResetCompleted);
+    connect(client_,
             &AcsClient::collectionControlWritten,
             this,
             &DataAcquisitionService::onCollectionControlWritten);
@@ -351,6 +355,27 @@ void DataAcquisitionService::onConnectionChanged(bool connected,
     if (state() == AcquisitionState::Fault) {
         setPhase(Phase::Idle);
     }
+    emit readinessChanged(isReady(), message);
+}
+
+void DataAcquisitionService::onControllerResetCompleted()
+{
+    if (state() != AcquisitionState::Fault) {
+        qCDebug(logAcquisition)
+            << "[采集流程][复位恢复] 当前不在 Fault，无需恢复，state="
+            << acquisitionStateText(state());
+        return;
+    }
+
+    invalidateRequests();
+    stoppingTimer_.invalidate();
+    lastConsumedSequence_ = 0;
+    setPhase(Phase::Idle);
+
+    const QString message =
+        QStringLiteral("控制器复位完成，采集故障状态已清除。");
+    qCInfo(logAcquisition).noquote()
+        << "[采集流程][复位恢复]" << message;
     emit readinessChanged(isReady(), message);
 }
 
