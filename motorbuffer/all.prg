@@ -681,6 +681,16 @@ WHILE 1
         END
 
 
+        ! 2026-10-12 stop-race fix:
+        ! DCSTART_CON may become 0 after the WHILE condition was accepted
+        ! but before DC becomes active. In that window the ON handler sees
+        ! S_ST.#DC = 0 and cannot stop the collection that starts afterward.
+        ! Recheck the stop level after DC starts so the missed edge is handled.
+        IF ^DCSTART_CON & S_ST.#DC
+            STOPDC
+        END
+
+
         ! Wait until collection finishes or is stopped
         TILL ^S_ST.#DC
 
