@@ -223,6 +223,17 @@ install(FILES "$<TARGET_FILE:Qt6::QPSQLDriverPlugin>"
 
 install(FILES "$<TARGET_FILE:Qt6::Network>" DESTINATION bin)
 
+add_executable(TemperatureAlarmChecks EXCLUDE_FROM_ALL
+    tests/TemperatureAlarmChecks.cpp
+    src/alarm/AlarmMonitor.h
+    src/alarm/AlarmMonitor.cpp
+)
+target_link_libraries(TemperatureAlarmChecks PRIVATE Qt6::Core)
+set_target_properties(TemperatureAlarmChecks PROPERTIES VS_GLOBAL_VcpkgEnabled "false")
+if(MSVC)
+    target_compile_options(TemperatureAlarmChecks PRIVATE /W4 /utf-8 /permissive-)
+endif()
+
 foreach(POSTGRESQL_RUNTIME_DLL IN LISTS POSTGRESQL_RUNTIME_DLLS)
     install(FILES "${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}"
         DESTINATION bin
