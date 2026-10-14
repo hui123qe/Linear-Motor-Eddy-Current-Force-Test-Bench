@@ -50,6 +50,8 @@ public:
     [[nodiscard]] AcsClient* acsClient() const;
     [[nodiscard]] bool homeDone() const;
     [[nodiscard]] bool homeRunning() const;
+    [[nodiscard]] bool hasActiveMotion() const;
+    void requestProtectionStop(const ProtectionStopRequest& request);
     [[nodiscard]] bool start(const TestParameters& parameters,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);
@@ -78,6 +80,8 @@ signals:
     void startRequestWritten();
     void stopRequestWritten();
     void commandFailed(const QString& message);
+    void safetyInhibitionChanged(bool inhibited, const QString& reason);
+    void protectionStopResult(const ProtectionStopResult& result);
 
 private:
     MotionControlService();
@@ -89,6 +93,10 @@ private:
     [[nodiscard]] bool validateMaintenanceCommand(
         bool requireEnabled,
         QString* errorMessage) const;
+    void rejectQueuedForceTare();
+    void rejectQueuedMaintenanceCommand(MaintenanceCommand command);
+    void rejectQueuedControllerReset();
+    void rejectQueuedAutomaticStart();
 
     AcsClient* client_ = nullptr;
     QThread workerThread_;
@@ -99,4 +107,5 @@ private:
     bool forceTarePending_ = false;
     bool connected_ = false;
     bool initialized_ = false;
+    bool protectionStopped_ = false;
 };

@@ -25,12 +25,16 @@ struct TestResultComparison
     double fluctuationRateDeviationPercentagePoints = 0.0;
 };
 
+[[nodiscard]] bool validateTestResultTargets(
+    const TestResultTargets& targets,
+    QString* errorMessage = nullptr);
+
 class TestResultService final : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit TestResultService(QObject* parent = nullptr);
+    static TestResultService& instance();
 
     [[nodiscard]] bool beginTest(const TestResultTargets& targets,
                                  QString* errorMessage = nullptr);
@@ -45,6 +49,8 @@ signals:
     void resultUpdated(const TestResultComparison& comparison);
 
 private:
+    TestResultService();
+
     std::optional<TestResultTargets> targets_;
     std::optional<TestResultComparison> comparison_;
 };

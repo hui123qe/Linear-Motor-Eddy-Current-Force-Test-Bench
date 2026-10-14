@@ -1,11 +1,18 @@
 #include "TestExecutionService.h"
 
 #include "../acquisition/DataAcquisitionService.h"
+#include "../config/TestConfigurationService.h"
 #include "../database/AcquisitionDatabaseService.h"
 #include "../logging/AppLogger.h"
+#include "../machine/MachineStateManager.h"
 #include "../motion/MotionControlService.h"
+#include "../result/TestResultService.h"
+#include "../alarm/AlarmService.h"
+#include "../temperature/TemperatureDeviceService.h"
 
 #include <QDateTime>
+
+#include <algorithm>
 
 namespace {
 
@@ -32,13 +39,14 @@ QString machineStateText(MachineState state)
 {
     switch (state) {
     case MachineState::Error:
-        return QStringLiteral("错误");
+        return QStringLiteral("故障");
     case MachineState::Idle:
         return QStringLiteral("空闲");
     case MachineState::Running:
-        return QStringLiteral("运行中");
+        return QStringLiteral("运行");
+    case MachineState::Resetting:
+        return QStringLiteral("复位中");
     }
-
     return QStringLiteral("未知");
 }
 
@@ -85,21 +93,21 @@ TestExecutionService::TestExecutionService()
     qRegisterMetaType<ExperimentFinalContext>("ExperimentFinalContext");
     qRegisterMetaType<ExperimentGroupFinalContext>(
         "ExperimentGroupFinalContext");
-    qRegisterMetaType<MachineState>("MachineState");
-
     MotionControlService& motionService = MotionControlService::instance();
     DataAcquisitionService& acquisitionService =
         DataAcquisitionService::instance();
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
 
     connect(&motionService,
             &MotionControlService::connectionChanged,
             this,
             [this](bool connected, const QString& message) {
+                const bool wasConnected = controllerConnected_;
                 controllerConnected_ = connected;
                 controllerStatusMessage_ = message;
-                if (!connected && hasActiveExecution()) {
+                if (!connected && (wasConnected || hasActiveExecution())) {
                     failExecution(
                         message.isEmpty()
                             ? QStringLiteral("测试运行期间 ACS 控制器连接断开。")
@@ -187,6 +195,14 @@ TestExecutionService::TestExecutionService()
                 failExecution(message, true);
             });
     connect(&motionService,
+            &MotionControlService::controllerResetCompleted,
+            this,
+            &TestExecutionService::handleControllerResetCompleted);
+    connect(&motionService,
+            &MotionControlService::controllerResetFailed,
+            this,
+            &TestExecutionService::handleControllerResetFailed);
+    connect(&motionService,
             &MotionControlService::emergencyStopCompleted,
             this,
             [this] {
@@ -198,21 +214,15 @@ TestExecutionService::TestExecutionService()
             [this](const QString& message) {
                 failExecution(message, true);
             });
+    connect(&machineStateManager,
+            &MachineStateManager::machineStateChanged,
+            this,
+            &TestExecutionService::handleMachineStateChanged);
 }
 
 TestExecutionService::~TestExecutionService()
 {
     shutdown();
-}
-
-MachineState TestExecutionService::machineState() const
-{
-    return machineState_;
-}
-
-QString TestExecutionService::machineStateReason() const
-{
-    return machineStateReason_;
 }
 
 void TestExecutionService::shutdown()
@@ -239,17 +249,35 @@ void TestExecutionService::shutdown()
     resetExecutionContext();
 }
 
-bool TestExecutionService::start(const TestParameters& parameters,
+bool TestExecutionService::canStart(QString* errorMessage) const
+{
+    return validateStartPrerequisites(errorMessage);
+}
+
+bool TestExecutionService::start(const TestResultTargets& resultTargets,
                                  QString* errorMessage)
 {
     if (!validateStartPrerequisites(errorMessage)) {
         return false;
     }
-    if (!validateTestParameters(parameters, errorMessage)) {
+    if (!validateTestResultTargets(resultTargets, errorMessage)) {
         return false;
     }
 
-    parameters_ = parameters;
+    const std::optional<TestParameters> lockedConfiguration =
+        TestConfigurationService::instance().lockedConfiguration();
+    if (!lockedConfiguration.has_value()) {
+        setError(errorMessage,
+                 QStringLiteral("请先在参数设置页确定并锁定配置。"));
+        return false;
+    }
+    if (!MachineStateManager::instance().beginExecution(
+            QStringLiteral("测试正在运行"), errorMessage)) {
+        return false;
+    }
+
+    parameters_ = *lockedConfiguration;
+    pendingResultTargets_ = resultTargets;
     executionId_ = nextExecutionId();
     baseExperimentName_ = experimentBaseName(parameters_)
                           + QLatin1Char('-')
@@ -264,7 +292,6 @@ bool TestExecutionService::start(const TestParameters& parameters,
     currentRecordDataFinished_ = false;
     pendingTerminalState_.reset();
     terminalReason_.clear();
-    setMachineState(MachineState::Running, QStringLiteral("测试正在运行"));
     emit executionStarted(executionId_, baseExperimentName_);
     prepareRepetition(1);
     return currentRepetitionIndex_ != 0;
@@ -298,8 +325,56 @@ bool TestExecutionService::stop(QString* errorMessage)
         failExecution(failureMessage, true);
         return false;
     }
-    setMachineState(MachineState::Running, QStringLiteral("正在停止测试"));
+    MachineStateManager::instance().updateRunningReason(
+        QStringLiteral("正在停止测试"));
     return true;
+}
+bool TestExecutionService::reset(QString* errorMessage)
+{
+    if (hasActiveExecution() || pendingTerminalState_.has_value() || MotionControlService::instance().hasActiveMotion()) {
+        setError(errorMessage, QStringLiteral("实验收尾或运动尚未结束，不能复位。")); return false;
+    }
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    if (!machineStateManager.beginReset(errorMessage)) {
+        return false;
+    }
+
+    QString resetError;
+    if (!MotionControlService::instance().resetController(&resetError)) {
+        const QString message =
+            resetError.isEmpty() ? QStringLiteral("控制器复位请求失败。")
+                                 : resetError;
+        machineStateManager.failReset(message);
+        setError(errorMessage, message);
+        return false;
+    }
+
+    return true;
+}
+void TestExecutionService::handleMachineStateChanged(
+    MachineState state,
+    const QString& reason)
+{
+    if (state != MachineState::Error || !hasActiveExecution()
+        || pendingTerminalState_.has_value()) {
+        return;
+    }
+
+    qCCritical(logSafety).noquote()
+        << "机器进入故障状态，测试流程开始收尾：" << reason;
+    // Hardware safety or the alarm response owns motion termination; this path closes the experiment.
+    failExecution(reason, true, false);
+}
+
+void TestExecutionService::handleControllerResetCompleted()
+{
+    MachineStateManager::instance().completeReset();
+}
+
+void TestExecutionService::handleControllerResetFailed(
+    const QString& message)
+{
+    MachineStateManager::instance().failReset(message);
 }
 
 void TestExecutionService::handleExperimentTableCreated(
@@ -364,6 +439,17 @@ void TestExecutionService::handleMotionStartRequestWritten()
         return;
     }
 
+    if (pendingResultTargets_.has_value()) {
+        QString errorMessage;
+        if (!TestResultService::instance().beginTest(
+                *pendingResultTargets_, &errorMessage)) {
+            pendingResultTargets_.reset();
+            failExecution(errorMessage, true);
+            return;
+        }
+        pendingResultTargets_.reset();
+    }
+
     motionStartRequested_ = false;
     motionStarted_ = true;
     completedRecordCount_ = 0;
@@ -383,15 +469,23 @@ void TestExecutionService::handleMotionStateChanged(int state, int errorCode)
         << "state=" << state
         << "errorCode=" << errorCode;
 
-    if (!hasActiveExecution()) {
+    if (state == -2 && errorCode == 2001) {
+        qCInfo(logMotion)
+            << "[流程层][运动状态] ACS 已确认正常停止，不升级为机器故障"
+            << "executionId=" << executionId_
+            << "userStopRequested=" << userStopRequested_;
         return;
     }
-    if (state < 0 && !userStopRequested_) {
-        failExecution(
+    if (state < 0) {
+        const QString message =
             QStringLiteral("运动程序进入故障状态 %1，错误码 %2。")
                 .arg(state)
-                .arg(errorCode),
-            true);
+                .arg(errorCode);
+        failExecution(message, true);
+        return;
+    }
+    if (!hasActiveExecution()) {
+        return;
     }
 }
 
@@ -461,6 +555,31 @@ void TestExecutionService::handleAcquisitionBlock(
     if (!AcquisitionDatabaseService::instance().appendBlock(
             block, &errorMessage)) {
         failExecution(errorMessage, true);
+        return;
+    }
+
+    const TestMotionParameters motionParameters =
+        selectedTestMotionParameters(parameters_);
+    const double minimumPosition =
+        std::min(motionParameters.acquisitionStartMeters,
+                 motionParameters.acquisitionEndMeters);
+    const double maximumPosition =
+        std::max(motionParameters.acquisitionStartMeters,
+                 motionParameters.acquisitionEndMeters);
+    const qsizetype sampleCount =
+        std::min(block.positionMeters.size(), block.forceNewtons.size());
+    QVector<QPointF> samples;
+    samples.reserve(sampleCount);
+    for (qsizetype index = 0; index < sampleCount; ++index) {
+        const double positionMeters = block.positionMeters.at(index);
+        if (positionMeters >= minimumPosition
+            && positionMeters <= maximumPosition) {
+            samples.append(
+                QPointF(positionMeters, block.forceNewtons.at(index)));
+        }
+    }
+    if (!samples.isEmpty()) {
+        emit chartSamplesReady(samples);
     }
 }
 
@@ -525,6 +644,10 @@ void TestExecutionService::handleExperimentTableFinished(
 
 void TestExecutionService::prepareRepetition(int repetitionIndex)
 {
+    const QString name = baseExperimentName_ + QLatin1Char('-') + QString::number(cycleIndexForRecord(repetitionIndex))
+        + QLatin1Char('-') + experimentMotionDirectionDisplayText(directionForRecord(repetitionIndex));
+    TemperatureDeviceService::instance().beginExperimentRecording(name);
+    AlarmService::instance().setExperimentName(name);
     currentRepetitionIndex_ = repetitionIndex;
     currentRawDataTableName_.clear();
     currentRawSampleCount_ = 0;
@@ -575,7 +698,8 @@ void TestExecutionService::tryAdvanceAfterRepetition()
         finalizeCurrentRepetition(ExperimentTerminalState::Completed, {});
         finalizeExecutionGroup(ExperimentTerminalState::Completed, {});
         resetExecutionContext();
-        setMachineState(MachineState::Idle, QStringLiteral("测试已完成"));
+        MachineStateManager::instance().completeExecution(
+            QStringLiteral("测试已完成"));
         emit executionFinished();
         return;
     }
@@ -635,6 +759,8 @@ void TestExecutionService::finalizeCurrentRepetition(
         << "table=" << context.rawDataTableName
         << "finalizedRecordCount=" << finalizedRecordCount_;
     emit experimentFinalized(context);
+    TemperatureDeviceService::instance().finishExperimentRecording();
+    AlarmService::instance().setExperimentName({});
 }
 
 void TestExecutionService::finalizeExecutionGroup(
@@ -710,16 +836,19 @@ void TestExecutionService::finishPendingTerminalState()
     resetExecutionContext();
 
     if (state == ExperimentTerminalState::Terminated) {
-        setMachineState(MachineState::Idle, QStringLiteral("测试已停止"));
+        MachineStateManager::instance().completeExecution(
+            QStringLiteral("测试已停止"));
         emit executionStopped();
         return;
     }
 
-    setMachineState(MachineState::Error, reason);
+    MachineStateManager::instance().enterFault(reason);
 }
 
 void TestExecutionService::resetExecutionContext()
 {
+    TemperatureDeviceService::instance().finishExperimentRecording();
+    AlarmService::instance().setExperimentName({});
     parameters_ = {};
     executionId_ = 0;
     baseExperimentName_.clear();
@@ -735,13 +864,18 @@ void TestExecutionService::resetExecutionContext()
     userStopRequested_ = false;
     motionStartRequested_ = false;
     motionStarted_ = false;
+    pendingResultTargets_.reset();
     pendingTerminalState_.reset();
 }
 
 void TestExecutionService::failExecution(const QString& message,
-                                         bool databaseUsable)
+                                         bool databaseUsable,
+                                         bool requestMotionStop)
 {
     if (!hasActiveExecution()) {
+        qCCritical(logApplication).noquote()
+            << "机器故障已锁存，等待复位：" << message;
+        MachineStateManager::instance().enterFault(message);
         return;
     }
 
@@ -758,7 +892,7 @@ void TestExecutionService::failExecution(const QString& message,
         if (!failureAlreadyReported) {
             emit executionFailed(message);
         }
-        setMachineState(MachineState::Error, terminalReason_);
+        MachineStateManager::instance().enterFault(terminalReason_);
         tryFinishPendingTerminalState(databaseUsable);
         return;
     }
@@ -766,7 +900,7 @@ void TestExecutionService::failExecution(const QString& message,
     pendingTerminalState_ = ExperimentTerminalState::Fault;
     terminalReason_ = message;
     qCCritical(logApplication).noquote() << "测试流程失败：" << message;
-    setMachineState(MachineState::Error, message);
+    MachineStateManager::instance().enterFault(message);
     emit executionFailed(message);
 
     QString ignoredError;
@@ -776,7 +910,7 @@ void TestExecutionService::failExecution(const QString& message,
                 << "流程故障后停止采集失败：" << ignoredError;
         }
     }
-    if (isActiveMotionState(motionState_)) {
+    if (requestMotionStop && isActiveMotionState(motionState_)) {
         ignoredError.clear();
         if (!MotionControlService::instance().stop(&ignoredError)) {
             qCWarning(logMotion).noquote()
@@ -795,8 +929,31 @@ bool TestExecutionService::hasActiveExecution() const
 bool TestExecutionService::validateStartPrerequisites(
     QString* errorMessage) const
 {
+    const MachineState machineState =
+        MachineStateManager::instance().state();
+    if (machineState != MachineState::Idle) {
+        setError(errorMessage,
+                 QStringLiteral("机器当前处于%1状态，不能启动测试。")
+                     .arg(machineStateText(machineState)));
+        return false;
+    }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
     if (hasActiveExecution()) {
         setError(errorMessage, QStringLiteral("已有测试流程正在执行或收尾。"));
+        return false;
+    }
+
+    const std::optional<TestParameters> lockedConfiguration =
+        TestConfigurationService::instance().lockedConfiguration();
+    if (!lockedConfiguration.has_value()) {
+        setError(errorMessage,
+                 QStringLiteral("请先在参数设置页确定并锁定配置。"));
+        return false;
+    }
+    if (!validateTestParameters(*lockedConfiguration, errorMessage)) {
         return false;
     }
     if (MotionControlService::instance().machineMode()
@@ -849,19 +1006,4 @@ bool TestExecutionService::validateStartPrerequisites(
     }
 
     return true;
-}
-
-void TestExecutionService::setMachineState(MachineState state,
-                                           const QString& reason)
-{
-    if (machineState_ == state && machineStateReason_ == reason) {
-        return;
-    }
-
-    machineState_ = state;
-    machineStateReason_ = reason;
-    qCInfo(logApplication).noquote()
-        << "机器状态迁移：" << machineStateText(machineState_)
-        << "-" << machineStateReason_;
-    emit machineStateChanged(machineState_, machineStateReason_);
 }

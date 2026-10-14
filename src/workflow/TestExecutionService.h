@@ -2,23 +2,18 @@
 
 #include "../config/TestParameters.h"
 #include "../experimentlog/ExperimentLogTypes.h"
+#include "../machine/MachineStateManager.h"
+#include "../result/TestResultService.h"
 
 #include <QMetaType>
 #include <QObject>
+#include <QPointF>
 #include <QString>
+#include <QVector>
 
 #include <optional>
 
 struct AcquisitionBlock;
-
-enum class MachineState
-{
-    Error,
-    Idle,
-    Running
-};
-
-Q_DECLARE_METATYPE(MachineState)
 
 class TestExecutionService final : public QObject
 {
@@ -28,19 +23,19 @@ public:
     static TestExecutionService& instance();
 
     void shutdown();
-    [[nodiscard]] MachineState machineState() const;
-    [[nodiscard]] QString machineStateReason() const;
-    [[nodiscard]] bool start(const TestParameters& parameters,
+    [[nodiscard]] bool canStart(QString* errorMessage = nullptr) const;
+    [[nodiscard]] bool start(const TestResultTargets& resultTargets,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);
+    [[nodiscard]] bool reset(QString* errorMessage = nullptr);
 
 signals:
-    void machineStateChanged(MachineState state, const QString& reason);
     void executionStarted(qint64 executionId,
                           const QString& baseExperimentName);
     void executionFinished();
     void executionStopped();
     void executionFailed(const QString& message);
+    void chartSamplesReady(const QVector<QPointF>& samples);
     void experimentFinalized(const ExperimentFinalContext& context);
     void experimentGroupFinalized(const ExperimentGroupFinalContext& context);
 
@@ -60,6 +55,10 @@ private:
     void handleMotionStartRequestWritten();
     void handleAcquisitionBlock(const AcquisitionBlock& block);
     void handleCollectionStopped();
+    void handleMachineStateChanged(MachineState state,
+                                   const QString& reason);
+    void handleControllerResetCompleted();
+    void handleControllerResetFailed(const QString& message);
     void handleExperimentTableFinished(int repetitionIndex,
                                        const QString& tableName,
                                        qint64 sampleCount);
@@ -73,11 +72,12 @@ private:
     void tryFinishPendingTerminalState(bool databaseUsable);
     void finishPendingTerminalState();
     void resetExecutionContext();
-    void failExecution(const QString& message, bool databaseUsable);
+    void failExecution(const QString& message,
+                       bool databaseUsable,
+                       bool requestMotionStop = true);
     [[nodiscard]] bool hasActiveExecution() const;
     [[nodiscard]] bool validateStartPrerequisites(
         QString* errorMessage) const;
-    void setMachineState(MachineState state, const QString& reason);
 
     TestParameters parameters_;
     qint64 executionId_ = 0;
@@ -98,10 +98,9 @@ private:
     bool controllerConnected_ = false;
     bool acquisitionReady_ = false;
     bool databaseReady_ = false;
-    MachineState machineState_ = MachineState::Idle;
-    QString machineStateReason_ = QStringLiteral("任务空闲");
     QString controllerStatusMessage_;
     QString acquisitionStatusMessage_;
     QString databaseStatusMessage_;
+    std::optional<TestResultTargets> pendingResultTargets_;
     std::optional<ExperimentTerminalState> pendingTerminalState_;
 };

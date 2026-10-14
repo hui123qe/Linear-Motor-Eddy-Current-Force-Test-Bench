@@ -12,6 +12,13 @@ inline constexpr std::array<const char*, 5> pressureValues = {
     "Up1_FLowA"
 };
 
+inline constexpr std::array<const char*, 4> safetyLightValues = {
+    "Safetylight1",
+    "Safetylight2",
+    "Safetylight3",
+    "Safetylight4"
+};
+inline constexpr char safetyDoorLock[] = "SafetyDoorLock";
 inline constexpr char forceValue[] = "Froce_Sensor";
 inline constexpr char homeDone[] = "HomeDone";
 inline constexpr char homeRunning[] = "HomeRunning";

@@ -2,8 +2,11 @@
 
 #include "widgets/StatusPill.h"
 #include "widgets/ViewHelpers.h"
+#include "../machine/MachineStateManager.h"
+#include "../motion/AcsVariableNames.h"
 #include "../motion/MotionControlService.h"
-#include "../workflow/TestExecutionService.h"
+#include "../safety/SafetyMonitor.h"
+#include "../temperature/TemperatureDeviceService.h"
 
 #include <QAbstractButton>
 #include <QEvent>
@@ -17,10 +20,68 @@
 #include <QScrollArea>
 #include <QStyle>
 #include <QVBoxLayout>
+#include <QDialog>
+#include <QTimer>
 
 namespace {
 
 constexpr int kDevicePanelWidth = 310;
+
+void updateSafetyPointDisplay(StatusPill* pill,
+                              QLabel* detailLabel,
+                              const SafetyPointStatus& status,
+                              const QString& source)
+{
+    if (pill == nullptr || detailLabel == nullptr) {
+        return;
+    }
+
+    switch (status.state) {
+    case SafetyPointState::Normal:
+        pill->setText(QStringLiteral("正常"));
+        pill->setLevel(QStringLiteral("ok"));
+        detailLabel->setText(QStringLiteral("值：%1").arg(status.rawValue));
+        detailLabel->setToolTip(
+            QStringLiteral("%1 = %2").arg(source).arg(status.rawValue));
+        return;
+    case SafetyPointState::Triggered:
+        pill->setText(QStringLiteral("触发"));
+        pill->setLevel(QStringLiteral("danger"));
+        detailLabel->setText(QStringLiteral("值：%1").arg(status.rawValue));
+        detailLabel->setToolTip(
+            QStringLiteral("%1 = %2").arg(source).arg(status.rawValue));
+        return;
+    case SafetyPointState::Unknown:
+        pill->setText(QStringLiteral("未知"));
+        pill->setLevel(QStringLiteral("neutral"));
+        detailLabel->setText(QStringLiteral("等待有效数据"));
+        detailLabel->setToolTip(source);
+        return;
+    case SafetyPointState::Unconfigured:
+        pill->setText(QStringLiteral("未配置"));
+        pill->setLevel(QStringLiteral("neutral"));
+        detailLabel->setText(source);
+        return;
+    }
+}
+
+SafetyPointStatus aggregateSafetyLights(
+    const std::array<SafetyPointStatus, kSafetyLightCount>& lights)
+{
+    SafetyPointStatus aggregate;
+    aggregate.state = SafetyPointState::Normal;
+    for (const SafetyPointStatus& light : lights) {
+        if (light.state == SafetyPointState::Triggered) {
+            aggregate.state = SafetyPointState::Triggered;
+            aggregate.rawValue = 1;
+            return aggregate;
+        }
+        if (light.state != SafetyPointState::Normal) {
+            aggregate.state = SafetyPointState::Unknown;
+        }
+    }
+    return aggregate;
+}
 
 } // namespace
 
@@ -41,7 +102,7 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     titleBox->addWidget(ViewHelpers::makeLabel(QStringLiteral("状态面板始终可见"), "railSubtitle"));
     titleRow->addLayout(titleBox);
     titleRow->addStretch();
-    titleRow->addWidget(new StatusPill(QStringLiteral("自检通过"), QStringLiteral("ok"), this));
+    titleRow->addWidget(new StatusPill(QStringLiteral("状态监测"), QStringLiteral("neutral"), this));
     outer->addLayout(titleRow);
 
     auto* machineStateCard = new QFrame;
@@ -57,13 +118,15 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
         ViewHelpers::makeLabel(QStringLiteral("状态"), "stateName"));
     machineStateRow->addStretch();
     machineStatePill_ = new StatusPill(
-        QStringLiteral("错误"), QStringLiteral("danger"), machineStateCard);
+        QStringLiteral("故障"), QStringLiteral("danger"), machineStateCard);
     machineStateRow->addWidget(machineStatePill_);
     machineStateLayout->addLayout(machineStateRow);
 
     machineStateReason_ = ViewHelpers::makeLabel(
         QStringLiteral("ACS 控制器未连接"), "stateDetail");
     machineStateReason_->setWordWrap(true);
+    machineStateReason_->setMaximumHeight(
+        machineStateReason_->fontMetrics().lineSpacing() * 2 + 2);
     machineStateLayout->addWidget(machineStateReason_);
 
     auto* machineModeRow = new QHBoxLayout;
@@ -79,14 +142,13 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     machineModeRow->addWidget(machineModeButton_);
     machineStateLayout->addLayout(machineModeRow);
     outer->addWidget(machineStateCard);
-
-    TestExecutionService& executionService = TestExecutionService::instance();
-    connect(&executionService,
-            &TestExecutionService::machineStateChanged,
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    connect(&machineStateManager,
+            &MachineStateManager::machineStateChanged,
             this,
             &DeviceStatusPanel::updateMachineStateDisplay);
-    updateMachineStateDisplay(executionService.machineState(),
-                              executionService.machineStateReason());
+    updateMachineStateDisplay(machineStateManager.state(),
+                              machineStateManager.reason());
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
@@ -98,21 +160,42 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
     contentLayout->setContentsMargins(0, 0, 2, 0);
     contentLayout->setSpacing(10);
 
-    auto addGroup = [this, contentLayout](const QString& name, const QList<QStringList>& items) {
-        auto* group = new QFrame;
-        group->setObjectName(QStringLiteral("deviceGroup"));
-        auto* layout = new QVBoxLayout(group);
-        layout->setContentsMargins(10, 10, 10, 10);
-        layout->setSpacing(7);
-        layout->addWidget(ViewHelpers::makeLabel(name, "deviceGroupTitle"));
-        for (const auto& item : items) {
-            layout->addWidget(createStateItem(item.at(0), item.at(1), item.at(2), item.at(3)));
-        }
-        contentLayout->addWidget(group);
-    };
+    auto* safetyGroup = new QFrame;
+    safetyGroup->setObjectName(QStringLiteral("deviceGroup"));
+    auto* safetyLayout = new QVBoxLayout(safetyGroup);
+    safetyLayout->setContentsMargins(10, 10, 10, 10);
+    safetyLayout->setSpacing(7);
+    safetyLayout->addWidget(
+        ViewHelpers::makeLabel(QStringLiteral("安全链"), "deviceGroupTitle"));
+    safetyLayout->addWidget(createStateItem(
+        QStringLiteral("硬件急停回路"),
+        QStringLiteral("未知"),
+        QStringLiteral("等待有效数据"),
+        QStringLiteral("neutral"),
+        &hardwareEmergencyStopPill_,
+        &hardwareEmergencyStopDetail_));
+    safetyLayout->addWidget(createStateItem(
+        QStringLiteral("光栅"),
+        QStringLiteral("未知"),
+        QStringLiteral("等待有效数据"),
+        QStringLiteral("neutral"),
+        &safetyLightPill_,
+        &safetyLightDetail_));
+    safetyLayout->addWidget(createStateItem(
+        QStringLiteral("安全门锁"),
+        QStringLiteral("未知"),
+        QStringLiteral("等待有效数据"),
+        QStringLiteral("neutral"),
+        &safetyDoorLockPill_,
+        &safetyDoorLockDetail_));
+    contentLayout->addWidget(safetyGroup);
 
-    addGroup(QStringLiteral("安全链"),
-             {{QStringLiteral("防护门 / 光幕"), QStringLiteral("正常"), QStringLiteral("参与联锁 · 10:38:20"), QStringLiteral("ok")}});
+    SafetyMonitor& safetyMonitor = SafetyMonitor::instance();
+    connect(&safetyMonitor,
+            &SafetyMonitor::safetySnapshotChanged,
+            this,
+            &DeviceStatusPanel::updateSafetyStatusDisplay);
+    updateSafetyStatusDisplay(safetyMonitor.snapshot());
 
     auto* communicationGroup = new QFrame;
     communicationGroup->setObjectName(QStringLiteral("deviceGroup"));
@@ -183,6 +266,43 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
         child->setAttribute(Qt::WA_TransparentForMouseEvents);
     }
     sensorLayout->addWidget(forceSensorCard_);
+    auto* temperatureFrame = new QFrame;
+    temperatureCard_ = temperatureFrame;
+    temperatureFrame->setObjectName(QStringLiteral("deviceGroup"));
+    temperatureFrame->setProperty("interactive", true);
+    temperatureFrame->setCursor(Qt::PointingHandCursor);
+    temperatureFrame->installEventFilter(this);
+    auto* temperatureLayout = new QVBoxLayout(temperatureFrame);
+    auto* temperatureTitle = new QHBoxLayout;
+    temperatureTitle->addWidget(ViewHelpers::makeLabel(QStringLiteral("温度采集模块"), "deviceGroupTitle"));
+    temperatureTitle->addStretch();
+    temperaturePill_ = new StatusPill(QStringLiteral("离线"), QStringLiteral("neutral"), temperatureFrame);
+    temperatureTitle->addWidget(temperaturePill_); temperatureLayout->addLayout(temperatureTitle);
+    temperatureRows_ = new QVBoxLayout;
+    temperatureLayout->addLayout(temperatureRows_);
+    maximumTemperatureLabel_ = ViewHelpers::makeLabel(QStringLiteral("当前最高：--"), "stateDetail");
+    maximumTemperatureLabel_->setWordWrap(true); temperatureLayout->addWidget(maximumTemperatureLabel_);
+    sensorLayout->addWidget(temperatureFrame);
+    TemperatureDeviceService& temperatureService = TemperatureDeviceService::instance();
+    connect(&temperatureService, &TemperatureDeviceService::configurationChanged,
+            this, &DeviceStatusPanel::rebuildTemperatureRows, Qt::QueuedConnection);
+    connect(&temperatureService, &TemperatureDeviceService::snapshotChanged,
+            this, &DeviceStatusPanel::updateTemperatureReadings, Qt::QueuedConnection);
+    connect(&temperatureService, &TemperatureDeviceService::connectionChanged, this,
+        [this](TemperatureConnectionState state, const QString& detail) {
+            const QString backend = TemperatureDeviceService::instance().configuration().backend == "simulator"
+                ? QStringLiteral("虚拟") : QStringLiteral("真实");
+            const QStringList names{QStringLiteral("离线"), QStringLiteral("连接中"), QStringLiteral("待数据"), QStringLiteral("在线"), QStringLiteral("异常")};
+            temperaturePill_->setText(backend + QStringLiteral("·") + names.at(static_cast<int>(state)));
+            temperaturePill_->setLevel(state == TemperatureConnectionState::Ready ? "ok"
+                : (state == TemperatureConnectionState::Error ? "danger" : "neutral"));
+            temperatureCard_->setToolTip(detail);
+        }, Qt::QueuedConnection);
+    rebuildTemperatureRows(temperatureService.configuration());
+    auto* freshnessTimer = new QTimer(this); freshnessTimer->setInterval(500);
+    connect(freshnessTimer, &QTimer::timeout, this, [this] {
+        updateTemperatureReadings(TemperatureDeviceService::instance().snapshot());
+    }); freshnessTimer->start();
     contentLayout->addWidget(sensorGroup);
     contentLayout->addStretch();
 
@@ -199,6 +319,10 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
 
 bool DeviceStatusPanel::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == temperatureCard_ && event->type() == QEvent::MouseButtonRelease) {
+        const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) { showTemperatureDialog(); return true; }
+    }
     if (watched == acsStateItem_
         && event->type() == QEvent::MouseButtonRelease) {
         const auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -219,9 +343,90 @@ bool DeviceStatusPanel::eventFilter(QObject* watched, QEvent* event)
     return QWidget::eventFilter(watched, event);
 }
 
+void DeviceStatusPanel::rebuildTemperatureRows(const TemperatureConfiguration& config)
+{
+    temperatureValues_.clear();
+    while (QLayoutItem* item = temperatureRows_->takeAt(0)) {
+        delete item->widget(); delete item;
+    }
+    for (const int channel : config.channels) {
+        auto* row = new QWidget;
+        auto* layout = new QHBoxLayout(row); layout->setContentsMargins(0, 0, 0, 0);
+        layout->addWidget(ViewHelpers::makeLabel(QStringLiteral("通道 %1").arg(channel), "stateName"));
+        layout->addStretch();
+        QLabel* value = ViewHelpers::makeLabel(QStringLiteral("--"), "stateDetail");
+        layout->addWidget(value); temperatureValues_.insert(channel, value); temperatureRows_->addWidget(row);
+    }
+    for (QWidget* child : temperatureCard_->findChildren<QWidget*>()) { child->setAttribute(Qt::WA_TransparentForMouseEvents); }
+    updateTemperatureReadings(TemperatureSnapshot{});
+}
+
+void DeviceStatusPanel::updateTemperatureReadings(const TemperatureSnapshot& snapshot)
+{
+    for (QLabel* label : temperatureValues_) { setSensorValue(label, QStringLiteral("--"), false); }
+    const TemperatureConfiguration config = TemperatureDeviceService::instance().configuration();
+    const bool stale = snapshot.observedMonoMs == 0 || deviceObservationMonoMs() - snapshot.observedMonoMs >= config.staleAfterMs;
+    std::optional<double> maximum; int maximumChannel = 0;
+    for (const TemperatureChannelSample& sample : snapshot.channels) {
+        QLabel* label = temperatureValues_.value(sample.channel, nullptr);
+        if (sample.quality != DataQuality::Good) { setSensorValue(label, QStringLiteral("探头故障/无效"), false); }
+        else if (stale) { setSensorValue(label, QStringLiteral("数据过期"), false); }
+        else {
+            setSensorValue(label, QStringLiteral("%1 ℃").arg(sample.celsius, 0, 'f', 1), true);
+            if (!maximum || sample.celsius > *maximum) { maximum = sample.celsius; maximumChannel = sample.channel; }
+        }
+    }
+    QString text = maximum ? QStringLiteral("当前最高：%1 ℃（通道 %2）").arg(*maximum, 0, 'f', 1).arg(maximumChannel) : QStringLiteral("当前最高：--");
+    if (snapshot.sessionPeakCelsius) { text += QStringLiteral("\n会话峰值：%1 ℃（通道 %2）").arg(*snapshot.sessionPeakCelsius, 0, 'f', 1).arg(snapshot.sessionPeakChannel); }
+    if (snapshot.experimentPeakCelsius) { text += QStringLiteral("\n实验峰值：%1 ℃（通道 %2）").arg(*snapshot.experimentPeakCelsius, 0, 'f', 1).arg(snapshot.experimentPeakChannel); }
+    maximumTemperatureLabel_->setText(text);
+}
+
+void DeviceStatusPanel::showTemperatureDialog()
+{
+    TemperatureDeviceService& service = TemperatureDeviceService::instance();
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("温度设备"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* status = new QLabel(service.connectionDetail());
+    status->setWordWrap(true);
+    layout->addWidget(status);
+    auto* buttons = new QHBoxLayout;
+    QPushButton* connectButton = ViewHelpers::makeButton(QStringLiteral("连接"), "primary");
+    QPushButton* disconnectButton = ViewHelpers::makeButton(QStringLiteral("断开连接"));
+    buttons->addWidget(connectButton);
+    buttons->addWidget(disconnectButton);
+    layout->addLayout(buttons);
+    const auto refresh = [connectButton, disconnectButton](TemperatureConnectionState state) {
+        connectButton->setEnabled(state == TemperatureConnectionState::Disconnected
+                                  || state == TemperatureConnectionState::Error);
+        disconnectButton->setEnabled(state != TemperatureConnectionState::Disconnected);
+    };
+    refresh(service.connectionState());
+    connect(&service, &TemperatureDeviceService::connectionChanged, &dialog,
+        [status, refresh](TemperatureConnectionState state, const QString& detail) {
+            status->setText(detail);
+            refresh(state);
+        }, Qt::QueuedConnection);
+    connect(connectButton, &QPushButton::clicked, &dialog, [&service, &dialog] {
+        QString error;
+        if (!service.connectDevice(&error)) { QMessageBox::warning(&dialog, QStringLiteral("温度连接"), error); }
+    });
+    connect(disconnectButton, &QPushButton::clicked, &dialog, [&service, &dialog] {
+        QString error;
+        if (!service.disconnectDevice(&error)) { QMessageBox::warning(&dialog, QStringLiteral("温度连接"), error); }
+    });
+    dialog.exec();
+}
+
 void DeviceStatusPanel::onInspectButtonClicked()
 {
-    emit messageRequested(QStringLiteral("设备自检完成：全部项目通过（模拟）"));
+    emit messageRequested(QStringLiteral("ACS：%1；安全回路：%2；温度设备：%3")
+        .arg(acsConnected_ ? QStringLiteral("已连接") : QStringLiteral("未连接"),
+             SafetyMonitor::instance().state() == SafetyState::Normal
+                 ? QStringLiteral("正常") : (SafetyMonitor::instance().state() == SafetyState::Triggered
+                     ? QStringLiteral("已触发") : QStringLiteral("未知")),
+             TemperatureDeviceService::instance().connectionDetail()));
 }
 
 void DeviceStatusPanel::updateAcsConnectionDisplay(
@@ -241,6 +446,24 @@ void DeviceStatusPanel::updateAcsConnectionDisplay(
         forceTarePending_ = false;
         clearSensorReadings();
     }
+}
+
+void DeviceStatusPanel::updateSafetyStatusDisplay(
+    const SafetyStatusSnapshot& status)
+{
+    updateSafetyPointDisplay(hardwareEmergencyStopPill_,
+                             hardwareEmergencyStopDetail_,
+                             status.hardwareEmergencyStop,
+                             QStringLiteral("ACS Hardware Emergency Stop"));
+    updateSafetyPointDisplay(safetyLightPill_,
+                             safetyLightDetail_,
+                             aggregateSafetyLights(status.safetyLights),
+                             QStringLiteral("4 路光栅汇总"));
+    updateSafetyPointDisplay(
+        safetyDoorLockPill_,
+        safetyDoorLockDetail_,
+        status.safetyDoorLock,
+        QString::fromLatin1(AcsVariableNames::safetyDoorLock));
 }
 
 void DeviceStatusPanel::updateSensorReadings(
@@ -279,10 +502,10 @@ void DeviceStatusPanel::handleForceTareFailed(const QString& message)
 
 void DeviceStatusPanel::showAcsConnectionDialog()
 {
-    TestExecutionService& executionService =
-        TestExecutionService::instance();
+    MachineStateManager& machineStateManager =
+        MachineStateManager::instance();
     if (acsConnected_
-        && executionService.machineState() == MachineState::Running) {
+        && machineStateManager.state() == MachineState::Running) {
         QMessageBox::warning(
             this,
             QStringLiteral("无法断开 ACS 控制器"),
@@ -312,7 +535,7 @@ void DeviceStatusPanel::showAcsConnectionDialog()
     MotionControlService& motionControlService =
         MotionControlService::instance();
     if (disconnectRequested) {
-        if (executionService.machineState() == MachineState::Running) {
+        if (machineStateManager.state() == MachineState::Running) {
             QMessageBox::warning(
                 this,
                 QStringLiteral("无法断开 ACS 控制器"),
@@ -345,15 +568,15 @@ void DeviceStatusPanel::showMachineModeDialog()
         targetMode == MachineMode::Automatic
             ? QStringLiteral("自动模式")
             : QStringLiteral("维修模式");
-    const TestExecutionService& executionService =
-        TestExecutionService::instance();
+    const MachineStateManager& machineStateManager =
+        MachineStateManager::instance();
     if (targetMode == MachineMode::Maintenance
-        && executionService.machineState() != MachineState::Idle) {
+        && machineStateManager.state() != MachineState::Idle) {
         QMessageBox::warning(
             this,
             QStringLiteral("无法进入维修模式"),
             QStringLiteral("任务当前不是空闲状态：%1")
-                .arg(executionService.machineStateReason()));
+                .arg(machineStateManager.reason()));
         return;
     }
 
@@ -370,12 +593,12 @@ void DeviceStatusPanel::showMachineModeDialog()
         return;
     }
     if (targetMode == MachineMode::Maintenance
-        && executionService.machineState() != MachineState::Idle) {
+        && machineStateManager.state() != MachineState::Idle) {
         QMessageBox::warning(
             this,
             QStringLiteral("无法进入维修模式"),
             QStringLiteral("任务状态已经变化：%1")
-                .arg(executionService.machineStateReason()));
+                .arg(machineStateManager.reason()));
         return;
     }
 
@@ -396,9 +619,9 @@ void DeviceStatusPanel::showForceTareDialog()
         return;
     }
 
-    TestExecutionService& executionService =
-        TestExecutionService::instance();
-    if (executionService.machineState() == MachineState::Running) {
+    MachineStateManager& machineStateManager =
+        MachineStateManager::instance();
+    if (machineStateManager.state() == MachineState::Running) {
         QMessageBox::warning(
             this,
             QStringLiteral("无法执行力传感器去皮"),
@@ -432,7 +655,7 @@ void DeviceStatusPanel::showForceTareDialog()
             QStringLiteral("ACS 控制器连接已断开。"));
         return;
     }
-    if (executionService.machineState() == MachineState::Running) {
+    if (machineStateManager.state() == MachineState::Running) {
         QMessageBox::warning(
             this,
             QStringLiteral("无法执行力传感器去皮"),
@@ -451,7 +674,7 @@ void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
     QString level;
     switch (state) {
     case MachineState::Error:
-        text = QStringLiteral("错误");
+        text = QStringLiteral("故障");
         level = QStringLiteral("danger");
         break;
     case MachineState::Idle:
@@ -459,7 +682,11 @@ void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
         level = QStringLiteral("ok");
         break;
     case MachineState::Running:
-        text = QStringLiteral("运行中");
+        text = QStringLiteral("运动");
+        level = QStringLiteral("info");
+        break;
+    case MachineState::Resetting:
+        text = QStringLiteral("复位中");
         level = QStringLiteral("info");
         break;
     }
@@ -468,6 +695,7 @@ void DeviceStatusPanel::updateMachineStateDisplay(MachineState state,
     machineStatePill_->setLevel(level);
     machineStatePill_->setToolTip(reason);
     machineStateReason_->setText(reason);
+    machineStateReason_->setToolTip(reason);
 }
 
 void DeviceStatusPanel::updateMachineModeDisplay(MachineMode mode)
@@ -554,7 +782,9 @@ void DeviceStatusPanel::setSensorValue(QLabel* label,
 QWidget* DeviceStatusPanel::createStateItem(const QString& name,
                                             const QString& state,
                                             const QString& detail,
-                                            const QString& level) const
+                                            const QString& level,
+                                            StatusPill** statePill,
+                                            QLabel** detailLabel) const
 {
     auto* item = new QFrame;
     item->setObjectName(QStringLiteral("stateItem"));
@@ -563,10 +793,19 @@ QWidget* DeviceStatusPanel::createStateItem(const QString& name,
     layout->setHorizontalSpacing(5);
     layout->setVerticalSpacing(3);
     layout->addWidget(ViewHelpers::makeLabel(name, "stateName"), 0, 0);
-    layout->addWidget(new StatusPill(state, level), 0, 1, Qt::AlignRight);
+    auto* pill = new StatusPill(state, level);
+    layout->addWidget(pill, 0, 1, Qt::AlignRight);
+    if (statePill != nullptr) {
+        *statePill = pill;
+    }
     if (!detail.isEmpty()) {
-        layout->addWidget(
-            ViewHelpers::makeLabel(detail, "stateDetail"), 1, 0, 1, 2);
+        QLabel* label = ViewHelpers::makeLabel(detail, "stateDetail");
+        label->setWordWrap(true);
+        label->setMaximumHeight(label->fontMetrics().lineSpacing() * 2 + 2);
+        layout->addWidget(label, 1, 0, 1, 2);
+        if (detailLabel != nullptr) {
+            *detailLabel = label;
+        }
     }
     return item;
 }

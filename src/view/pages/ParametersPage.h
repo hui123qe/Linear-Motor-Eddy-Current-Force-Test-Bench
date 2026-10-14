@@ -89,6 +89,5 @@ private:
     StatusPill* variableStatus_ = nullptr;
     QFrame* variableCheck_ = nullptr;
     QLabel* variableHint_ = nullptr;
-    TestConfigurationService configurationService_;
     bool configurationLocked_ = false;
 };

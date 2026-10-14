@@ -4,6 +4,7 @@
 #include "../../database/AcquisitionDatabaseService.h"
 #include "../../experimentlog/ExperimentLogService.h"
 #include "../../logging/AppLogger.h"
+#include "../../machine/MachineStateManager.h"
 #include "../../motion/MotionControlService.h"
 #include "../../workflow/TestExecutionService.h"
 #include "../components/chart/ChartWidget.h"
@@ -23,7 +24,6 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include <algorithm>
 #include <optional>
 
 namespace {
@@ -145,13 +145,6 @@ QString motionStateText(int state, int errorCode)
     }
 }
 
-bool isActiveMotionState(int state)
-{
-    return state == 10 || state == 20 || state == 30
-           || state == 40 || state == 50 || state == 55
-           || state == 60 || state == 70 || state == 75;
-}
-
 } // namespace
 
 WorkbenchPage::WorkbenchPage(QWidget* parent)
@@ -166,7 +159,7 @@ WorkbenchPage::WorkbenchPage(QWidget* parent)
     initializePrimaryArea(pageLayout);
     initializeLowerArea(pageLayout);
     initializeConnections();
-    updateMotionStateDisplay();
+    currentStateValue_->setText(QStringLiteral("ACS 未连接"));
 }
 
 void WorkbenchPage::initializePageHeader(QVBoxLayout* pageLayout)
@@ -364,31 +357,16 @@ void WorkbenchPage::initializeConnections()
             this,
             &WorkbenchPage::setDisplacement);
     connect(&motionControlService,
-            &MotionControlService::homeDoneChanged,
-            this,
-            &WorkbenchPage::setHomeDone);
-    connect(&motionControlService,
             &MotionControlService::homeRunningChanged,
             this,
             &WorkbenchPage::setHomeRunning);
     connect(&motionControlService,
-            &MotionControlService::maintenanceCommandCompleted,
-            this,
-            [this](MaintenanceCommand command) {
-                if (command == MaintenanceCommand::HomeAxis
-                    && homeCommandRequested_) {
-                    homeCommandRequested_ = false;
-                }
-            });
-    connect(&motionControlService,
             &MotionControlService::maintenanceCommandFailed,
             this,
             [this](MaintenanceCommand command, const QString& message) {
-                if (command != MaintenanceCommand::HomeAxis
-                    || !homeCommandRequested_) {
+                if (command != MaintenanceCommand::HomeAxis) {
                     return;
                 }
-                homeCommandRequested_ = false;
                 QMessageBox::warning(
                     this, QStringLiteral("回零失败"), message);
             });
@@ -396,51 +374,22 @@ void WorkbenchPage::initializeConnections()
             &MotionControlService::controllerResetCompleted,
             this,
             [this] {
-                if (!resetCommandRequested_) {
-                    return;
-                }
-                resetCommandRequested_ = false;
-                updateMotionStateDisplay();
                 QMessageBox::information(
                     this,
-                    QStringLiteral("控制器复位"),
-                    QStringLiteral(
-                        "复位完成，ACS Buffer 1、2、3 已重新启动。"));
+                    QStringLiteral("复位"),
+                    QStringLiteral("复位完成。"));
             });
     connect(&motionControlService,
             &MotionControlService::controllerResetFailed,
             this,
             [this](const QString& message) {
-                if (!resetCommandRequested_) {
-                    return;
-                }
-                resetCommandRequested_ = false;
-                updateMotionStateDisplay();
                 QMessageBox::warning(
                     this, QStringLiteral("控制器复位失败"), message);
-            });
-    connect(&motionControlService,
-            &MotionControlService::startRequestWritten,
-            this,
-            [this] {
-                setMotionCommandPending(false);
-                if (!pendingResultTargets_.has_value()) {
-                    return;
-                }
-
-                QString errorMessage;
-                if (!resultService_.beginTest(
-                        *pendingResultTargets_, &errorMessage)) {
-                    QMessageBox::warning(
-                        this, QStringLiteral("启动测试失败"), errorMessage);
-                }
-                pendingResultTargets_.reset();
             });
     connect(&motionControlService,
             &MotionControlService::stopRequestWritten,
             this,
             [this] {
-                setMotionCommandPending(false);
                 QMessageBox::information(
                     this,
                     QStringLiteral("停止测试"),
@@ -452,7 +401,7 @@ void WorkbenchPage::initializeConnections()
             &DataAcquisitionService::readinessChanged,
             this,
             [this](bool ready, const QString& message) {
-                if (!ready && controllerConnected_) {
+                if (!ready) {
                     currentStateValue_->setToolTip(message);
                 }
             });
@@ -464,11 +413,6 @@ void WorkbenchPage::initializeConnections()
             &DataAcquisitionService::collectionStopped,
             this,
             &WorkbenchPage::commitChartCollection);
-    connect(&dataAcquisitionService,
-            &DataAcquisitionService::forcePositionSamplesReady,
-            this,
-            &WorkbenchPage::appendForcePositionSamples);
-
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
     connect(&databaseService,
@@ -480,7 +424,16 @@ void WorkbenchPage::initializeConnections()
                 }
             });
 
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    connect(&machineStateManager,
+            &MachineStateManager::machineStateChanged,
+            this,
+            &WorkbenchPage::updateMachineStateDisplay);
     TestExecutionService& executionService = TestExecutionService::instance();
+    connect(&executionService,
+            &TestExecutionService::chartSamplesReady,
+            this,
+            &WorkbenchPage::appendForcePositionSamples);
     connect(&executionService,
             &TestExecutionService::executionStarted,
             this,
@@ -492,23 +445,9 @@ void WorkbenchPage::initializeConnections()
                 clearResults();
             });
     connect(&executionService,
-            &TestExecutionService::executionFinished,
-            this,
-            [this] {
-                setMotionCommandPending(false);
-            });
-    connect(&executionService,
-            &TestExecutionService::executionStopped,
-            this,
-            [this] {
-                setMotionCommandPending(false);
-            });
-    connect(&executionService,
             &TestExecutionService::executionFailed,
             this,
             [this](const QString& message) {
-                pendingResultTargets_.reset();
-                setMotionCommandPending(false);
                 QMessageBox::warning(
                     this, QStringLiteral("测试流程失败"), message);
             });
@@ -551,171 +490,55 @@ void WorkbenchPage::initializeConnections()
                     currentStateValue_->setToolTip(message);
                 }
             });
-    connect(&resultService_,
+    TestResultService& resultService = TestResultService::instance();
+    connect(&resultService,
             &TestResultService::resultCleared,
             this,
             &WorkbenchPage::clearResults);
-    connect(&resultService_,
+    connect(&resultService,
             &TestResultService::resultUpdated,
             this,
             &WorkbenchPage::setResultComparison);
 }
 
-bool WorkbenchPage::isConfigurationLocked() const
-{
-    return configurationLocked_;
-}
-
 void WorkbenchPage::onStartButtonClicked()
 {
-    if (motionCommandPending_ || homeCommandRequested_
-        || resetCommandRequested_) {
+    QString errorMessage;
+    if (!TestExecutionService::instance().canStart(&errorMessage)) {
         QMessageBox::warning(
             this,
             QStringLiteral("启动测试失败"),
-            QStringLiteral("控制命令正在处理中，请稍后再试。"));
-        return;
-    }
-    if (!controllerConnected_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("ACS 控制器未连接。"));
-        return;
-    }
-    if (homeRunning_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("机器正在回零，不能启动测试。"));
-        return;
-    }
-    if (!homeDone_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("机器尚未完成回零，不能启动测试。"));
-        return;
-    }
-    if (motionState_ != 0) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("机器当前状态为 %1，只有空闲状态 0 可以启动。")
-                .arg(motionState_));
-        return;
-    }
-    if (!configurationLocked_ || !configuration_.has_value()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("请先在参数设置页确定并锁定配置。"));
+            errorMessage);
         return;
     }
 
     const std::optional<TestResultTargets> targets = requestTestResultTargets(this);
     if (targets.has_value()) {
-        setMotionCommandPending(true);
         beginTest(*targets);
     }
 }
 
 void WorkbenchPage::onStopButtonClicked()
 {
-    if (motionCommandPending_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("停止测试失败"),
-            QStringLiteral("控制命令正在处理中，请稍后再试。"));
-        return;
-    }
-
-    setMotionCommandPending(true);
     stopTest();
 }
 
 void WorkbenchPage::onHomeButtonClicked()
 {
-    if (motionCommandPending_ || homeCommandRequested_
-        || resetCommandRequested_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("回零失败"),
-            QStringLiteral("控制命令正在处理中，请稍后再试。"));
-        return;
-    }
-    if (!controllerConnected_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("回零失败"),
-            QStringLiteral("ACS 控制器未连接。"));
-        return;
-    }
-    if (homeRunning_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("回零失败"),
-            QStringLiteral("机器正在回零。"));
-        return;
-    }
-    if (motionState_ != 0) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("回零失败"),
-            QStringLiteral("机器当前状态为 %1，不能回零。")
-                .arg(motionState_));
-        return;
-    }
-
     QString errorMessage;
     if (!MotionControlService::instance().homeAxis(&errorMessage)) {
         QMessageBox::warning(
             this, QStringLiteral("回零失败"), errorMessage);
-        return;
     }
-
-    homeCommandRequested_ = true;
 }
 
 void WorkbenchPage::onResetButtonClicked()
 {
-    if (motionCommandPending_ || homeCommandRequested_
-        || resetCommandRequested_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("控制器复位失败"),
-            QStringLiteral("控制命令正在处理中，请稍后再试。"));
-        return;
-    }
-    if (!controllerConnected_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("控制器复位失败"),
-            QStringLiteral("ACS 控制器未连接。"));
-        return;
-    }
-    if (homeRunning_) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("控制器复位失败"),
-            QStringLiteral("机器正在回零，不能复位控制器。"));
-        return;
-    }
-    if (motionState_ != 0) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("控制器复位失败"),
-            QStringLiteral("机器当前状态为 %1，不能复位控制器。")
-                .arg(motionState_));
-        return;
-    }
-
+    TestExecutionService& executionService = TestExecutionService::instance();
     const QMessageBox::StandardButton confirmation = QMessageBox::question(
         this,
-        QStringLiteral("确认复位控制器"),
-        QStringLiteral(
-            "复位将停止并重新启动 ACS Buffer 1、2、3。\n\n"
-            "确定继续吗？"),
+        QStringLiteral("确认复位"),
+        QStringLiteral("确定复位？"),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (confirmation != QMessageBox::Yes) {
@@ -723,19 +546,14 @@ void WorkbenchPage::onResetButtonClicked()
     }
 
     QString errorMessage;
-    if (!MotionControlService::instance().resetController(&errorMessage)) {
+    if (!executionService.reset(&errorMessage)) {
         QMessageBox::warning(
             this, QStringLiteral("控制器复位失败"), errorMessage);
-        return;
     }
-
-    resetCommandRequested_ = true;
-    updateMotionStateDisplay();
 }
 
 void WorkbenchPage::setConfiguration(const TestParameters& parameters)
 {
-    configuration_ = parameters;
     testItemCard_->setValue(testTypeText(parameters.selectedTestType));
 
     const QString batchName = testBatchName(parameters);
@@ -744,14 +562,12 @@ void WorkbenchPage::setConfiguration(const TestParameters& parameters)
 
 void WorkbenchPage::clearConfiguration()
 {
-    configuration_.reset();
     testItemCard_->setValue(QStringLiteral("----"));
     batchCard_->setValue(QStringLiteral("----"));
 }
 
 void WorkbenchPage::setConfigurationLocked(bool locked)
 {
-    configurationLocked_ = locked;
     configurationStatus_->setText(
         locked ? QStringLiteral("参数已锁定") : QStringLiteral("参数未锁定"));
     configurationStatus_->setLevel(
@@ -760,94 +576,68 @@ void WorkbenchPage::setConfigurationLocked(bool locked)
 
 void WorkbenchPage::setControllerConnected(bool connected, const QString& message)
 {
-    controllerConnected_ = connected;
     currentStateValue_->setToolTip(message);
     if (!connected) {
-        motionCommandPending_ = false;
-        homeCommandRequested_ = false;
-        homeDone_ = false;
-        homeRunning_ = false;
+        currentStateValue_->setText(QStringLiteral("ACS 未连接"));
         displacementCard_->setValue(QStringLiteral("-- mm"));
         chartWidget_->start(false);
+        return;
     }
-    updateMotionStateDisplay();
+
+    currentStateValue_->setText(QStringLiteral("等待 ACS 状态"));
 }
 
 void WorkbenchPage::setMotionState(int state, int errorCode)
 {
-    const int previousState = motionState_;
-    motionState_ = state;
-    motionErrorCode_ = errorCode;
-    if (state != previousState) {
-        motionCommandPending_ = false;
-    }
-
-    updateMotionStateDisplay();
-    chartWidget_->start(controllerConnected_ && (state == 50 || state == 70));
-}
-
-void WorkbenchPage::setHomeDone(bool done)
-{
-    homeDone_ = done;
+    currentStateValue_->setText(motionStateText(state, errorCode));
+    chartWidget_->start(state == 50 || state == 70);
 }
 
 void WorkbenchPage::setHomeRunning(bool running)
 {
-    homeRunning_ = running;
-    updateMotionStateDisplay();
+    if (running) {
+        currentStateValue_->setText(QStringLiteral("回零中"));
+        return;
+    }
+
+    const MachineStateManager& machineStateManager =
+        MachineStateManager::instance();
+    updateMachineStateDisplay(machineStateManager.state(),
+                              machineStateManager.reason());
 }
 
 void WorkbenchPage::setDisplacement(double positionMillimeters)
 {
     displacementCard_->setValue(
-        controllerConnected_
-            ? QStringLiteral("%1 mm")
-                  .arg(positionMillimeters, 0, 'f', 3)
-            : QStringLiteral("-- mm"));
+        QStringLiteral("%1 mm").arg(positionMillimeters, 0, 'f', 3));
 }
 
-void WorkbenchPage::setMotionCommandPending(bool pending)
+void WorkbenchPage::updateMachineStateDisplay(
+    MachineState state,
+    const QString& reason)
 {
-    motionCommandPending_ = pending;
-}
-
-void WorkbenchPage::updateMotionStateDisplay()
-{
-    if (!controllerConnected_) {
-        currentStateValue_->setText(QStringLiteral("ACS 未连接"));
-        return;
+    currentStateValue_->setToolTip(reason);
+    switch (state) {
+    case MachineState::Error:
+        currentStateValue_->setText(QStringLiteral("故障"));
+        break;
+    case MachineState::Idle:
+        currentStateValue_->setText(QStringLiteral("空闲"));
+        break;
+    case MachineState::Running:
+        currentStateValue_->setText(QStringLiteral("运行"));
+        break;
+    case MachineState::Resetting:
+        currentStateValue_->setText(QStringLiteral("复位中"));
+        break;
     }
-    if (resetCommandRequested_) {
-        currentStateValue_->setText(QStringLiteral("控制器复位中"));
-        return;
-    }
-    if (homeRunning_) {
-        currentStateValue_->setText(QStringLiteral("回零中"));
-        return;
-    }
-
-    currentStateValue_->setText(
-        motionStateText(motionState_, motionErrorCode_));
 }
 
 void WorkbenchPage::beginTest(const TestResultTargets& targets)
 {
-    if (!configurationLocked_ || !configuration_.has_value()) {
-        setMotionCommandPending(false);
-        QMessageBox::warning(
-            this,
-            QStringLiteral("启动测试失败"),
-            QStringLiteral("请先在参数设置页确定并锁定配置。"));
-        return;
-    }
-
-    pendingResultTargets_ = targets;
     clearChartData();
     QString errorMessage;
-    if (!TestExecutionService::instance().start(
-            *configuration_, &errorMessage)) {
-        pendingResultTargets_.reset();
-        setMotionCommandPending(false);
+    if (!TestExecutionService::instance().start(targets, &errorMessage)) {
         QMessageBox::warning(
             this, QStringLiteral("启动测试失败"), errorMessage);
     }
@@ -860,7 +650,6 @@ void WorkbenchPage::stopTest()
         return;
     }
 
-    setMotionCommandPending(false);
     QMessageBox::warning(
         this, QStringLiteral("停止测试失败"), errorMessage);
 }
@@ -868,22 +657,11 @@ void WorkbenchPage::stopTest()
 void WorkbenchPage::appendForcePositionSamples(
     const QVector<QPointF>& samples)
 {
-    if (!chartCollectionActive_ || !configuration_.has_value()) {
+    if (!chartCollectionActive_) {
         return;
     }
-
-    const TestMotionParameters motionParameters =
-        selectedTestMotionParameters(*configuration_);
-    const double minimumPosition =
-        std::min(motionParameters.acquisitionStartMeters,
-                 motionParameters.acquisitionEndMeters);
-    const double maximumPosition =
-        std::max(motionParameters.acquisitionStartMeters,
-                 motionParameters.acquisitionEndMeters);
     for (const QPointF& sample : samples) {
-        if (sample.x() >= minimumPosition && sample.x() <= maximumPosition) {
-            pendingChartSamples_.append(sample);
-        }
+        pendingChartSamples_.append(sample);
     }
 
     const qsizetype overflow =

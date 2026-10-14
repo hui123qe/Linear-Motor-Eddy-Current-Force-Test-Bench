@@ -1,14 +1,40 @@
 #pragma once
 
 #include "../acquisition/AcquisitionTypes.h"
+#include "../safety/SafetyTypes.h"
 
 #include <QMetaType>
 #include <QObject>
 #include <QString>
+#include <QUuid>
+#include <QMap>
 
 #include <array>
 
 class QTimer;
+
+// Execution feedback belongs to motion control, independent of alarm lifecycle.
+enum class ProtectionStopState { Pending, Confirmed, Failed, TimedOut };
+
+struct ProtectionStopRequest
+{
+    QUuid occurrenceId;
+    int buffer = -1;
+    int timeoutMs = 5000;
+    QString reason;
+};
+
+struct ProtectionStopResult
+{
+    QUuid occurrenceId;
+    int buffer = -1;
+    ProtectionStopState state = ProtectionStopState::Pending;
+    bool bufferStopSucceeded = false;
+    bool killAllSucceeded = false;
+    QString detail;
+};
+
+Q_DECLARE_METATYPE(ProtectionStopResult)
 
 struct MotionStartRequest
 {
@@ -28,6 +54,7 @@ struct AcsMotionStatus
     bool homeDone = false;
     bool homeRunning = false;
     bool axisEnabled = false;
+    bool axisMoving = false;
     double feedbackPositionMillimeters = 0.0;
     double feedbackVelocityMillimetersPerSecond = 0.0;
 };
@@ -64,8 +91,9 @@ public:
 public slots:
     void connectController();
     void disconnectController();
-    void restartControlBuffers();
+    void resetController();
     void emergencyStop();
+    void stopConfiguredBufferAndKillAll(const ProtectionStopRequest& request);
     void tareForceSensor();
     void enableAxis();
     void disableAxis();
@@ -84,10 +112,13 @@ public slots:
 
 signals:
     void connectionChanged(bool connected, const QString& message);
-    void controlBuffersRestartCompleted();
-    void controlBuffersRestartFailed(const QString& message);
+    void safetyStatusSampled(const SafetyStatusSnapshot& snapshot);
+    void safetyStatusReadFailed(const QString& message);
+    void controllerResetCompleted();
+    void controllerResetFailed(const QString& message);
     void emergencyStopCompleted();
     void emergencyStopFailed(const QString& message);
+    void protectionStopResult(const ProtectionStopResult& result);
     void statusChanged(const AcsMotionStatus& status);
     void sensorReadingsChanged(const AcsSensorReadings& readings);
     void forceTareStarted();
@@ -109,6 +140,7 @@ signals:
 private slots:
     void pollStatus();
     void pollSensors();
+    void verifyProtectionStops();
 
 private:
     [[nodiscard]] bool loadConfiguration(QString* errorMessage);
@@ -152,6 +184,9 @@ private:
     void* controllerHandle_;
     QTimer* pollTimer_ = nullptr;
     QTimer* sensorPollTimer_ = nullptr;
+    QTimer* protectionTimer_ = nullptr;
+    QMap<QUuid, ProtectionStopResult> pendingProtectionStops_;
+    QMap<QUuid, qint64> protectionDeadlines_;
     QString connectionMode_;
     QString address_;
     int port_ = 0;

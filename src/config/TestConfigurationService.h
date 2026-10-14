@@ -7,6 +7,8 @@
 class TestConfigurationService final
 {
 public:
+    static TestConfigurationService& instance();
+
     explicit TestConfigurationService(TestParametersStore store = TestParametersStore{});
 
     [[nodiscard]] bool loadSavedConfiguration(QString* errorMessage = nullptr);

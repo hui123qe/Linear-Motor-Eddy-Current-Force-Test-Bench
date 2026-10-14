@@ -3,9 +3,14 @@
 #include "experimentlog/ExperimentExportService.h"
 #include "experimentlog/ExperimentLogService.h"
 #include "logging/AppLogger.h"
+#include "machine/MachineStateManager.h"
 #include "motion/MotionControlService.h"
+#include "safety/SafetyMonitor.h"
 #include "view/MainWindow.h"
 #include "workflow/TestExecutionService.h"
+#include "temperature/TemperatureDeviceService.h"
+#include "alarm/AlarmService.h"
+#include "globh.h"
 
 #include <QApplication>
 #include <QFile>
@@ -48,9 +53,31 @@ int main(int argc, char* argv[])
         DataAcquisitionService::instance();
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
+    SafetyMonitor& safetyMonitor = SafetyMonitor::instance();
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
     TestExecutionService& executionService = TestExecutionService::instance();
     qCInfo(logApplication) << "初始化 ACS 电机服务";
     motionControlService.initialize();
+    safetyMonitor.initialize(motionControlService.acsClient());
+    machineStateManager.initialize(&safetyMonitor);
+    TemperatureDeviceService& temperatureService = TemperatureDeviceService::instance();
+    AlarmService& alarmService = AlarmService::instance();
+    QObject::connect(&alarmService, &AlarmService::alarmRaised,
+                     &machineStateManager, [&machineStateManager](const AlarmRecord& record) {
+        if (record.code == QStringLiteral("TEMP_FAULT")) { machineStateManager.enterFault(record.title); }
+    }, Qt::DirectConnection);
+    QObject::connect(&alarmService, &AlarmService::alarmRaised,
+                     &motionControlService, [&motionControlService](const AlarmRecord& record) {
+        if (record.code != QStringLiteral("TEMP_FAULT")) { return; }
+        motionControlService.requestProtectionStop({record.occurrenceId, g_temperatureFaultStopBuffer,
+            g_temperatureFaultStopTimeoutMs, record.title});
+    }, Qt::DirectConnection);
+    alarmService.initialize(&temperatureService, &safetyMonitor, motionControlService.acsClient());
+    temperatureService.initialize();
+    QObject::connect(&executionService, &TestExecutionService::executionFinished,
+                     &alarmService, [&alarmService] { alarmService.setExperimentName({}); });
+    QObject::connect(&executionService, &TestExecutionService::executionStopped,
+                     &alarmService, [&alarmService] { alarmService.setExperimentName({}); });
     dataAcquisitionService.initialize(motionControlService.acsClient());
     databaseService.initialize();
     motionControlService.connectController();
@@ -59,9 +86,13 @@ int main(int argc, char* argv[])
     const int exitCode = application.exec();
     qCInfo(logApplication) << "应用事件循环结束，退出码" << exitCode;
     executionService.shutdown();
+    temperatureService.shutdown();
+    alarmService.shutdown();
     dataAcquisitionService.shutdown();
     ExperimentExportService::instance().shutdown();
     databaseService.shutdown();
+    machineStateManager.shutdown();
+    safetyMonitor.shutdown();
     motionControlService.shutdown();
     qCInfo(logApplication) << "应用退出";
     AppLogging::shutdown();

@@ -7,8 +7,6 @@
 #include <QVector>
 #include <QWidget>
 
-#include <optional>
-
 class QLabel;
 class ChartWidget;
 class MetricCard;
@@ -17,6 +15,7 @@ class StatusPill;
 class QVBoxLayout;
 struct ExperimentRecord;
 struct ExperimentSummaryRecord;
+enum class MachineState;
 
 class WorkbenchPage final : public QWidget
 {
@@ -24,7 +23,6 @@ class WorkbenchPage final : public QWidget
 
 public:
     explicit WorkbenchPage(QWidget* parent = nullptr);
-    [[nodiscard]] bool isConfigurationLocked() const;
 
 public slots:
     void setConfiguration(const TestParameters& parameters);
@@ -32,10 +30,8 @@ public slots:
     void setConfigurationLocked(bool locked);
     void setControllerConnected(bool connected, const QString& message);
     void setMotionState(int state, int errorCode);
-    void setHomeDone(bool done);
     void setHomeRunning(bool running);
     void setDisplacement(double positionMillimeters);
-    void setMotionCommandPending(bool pending);
     void appendForcePositionSamples(const QVector<QPointF>& samples);
     void clearChartData();
     void clearResults();
@@ -59,11 +55,8 @@ private:
     void initializeConnections();
     void beginTest(const TestResultTargets& targets);
     void stopTest();
-    void updateMotionStateDisplay();
+    void updateMachineStateDisplay(MachineState state, const QString& reason);
 
-    TestResultService resultService_;
-    std::optional<TestParameters> configuration_;
-    std::optional<TestResultTargets> pendingResultTargets_;
     MetricCard* testItemCard_ = nullptr;
     MetricCard* batchCard_ = nullptr;
     MetricCard* averageForceCard_ = nullptr;
@@ -81,16 +74,7 @@ private:
     QPushButton* stopButton_ = nullptr;
     QPushButton* homeButton_ = nullptr;
     QPushButton* resetButton_ = nullptr;
-    bool configurationLocked_ = false;
-    bool controllerConnected_ = false;
-    bool motionCommandPending_ = false;
-    bool homeCommandRequested_ = false;
-    bool resetCommandRequested_ = false;
-    bool homeDone_ = false;
-    bool homeRunning_ = false;
     bool chartCollectionActive_ = false;
-    int motionState_ = 0;
-    int motionErrorCode_ = 0;
     qint64 activeExecutionId_ = 0;
     QVector<QPointF> pendingChartSamples_;
 };

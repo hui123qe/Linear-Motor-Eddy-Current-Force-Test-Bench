@@ -4,8 +4,6 @@
 
 #include <QElapsedTimer>
 #include <QObject>
-#include <QPointF>
-#include <QVector>
 
 class AcsClient;
 class QTimer;
@@ -31,7 +29,6 @@ signals:
     void collectionStarted();
     void collectionStopped();
     void blockReady(const AcquisitionBlock& block);
-    void forcePositionSamplesReady(const QVector<QPointF>& samples);
     void collectionFailed(const QString& message);
 
 private slots:
@@ -82,8 +79,6 @@ private:
                                        int* blockIndex,
                                        int* sequence,
                                        QString* errorMessage) const;
-
-    void publishForcePositionSamples(const AcquisitionBlock& block);
 
     AcsClient* client_ = nullptr;
     QTimer* pollTimer_ = nullptr;

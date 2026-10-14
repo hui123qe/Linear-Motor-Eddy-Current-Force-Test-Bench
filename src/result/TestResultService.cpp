@@ -13,23 +13,6 @@ void setError(QString* errorMessage, const QString& message)
     }
 }
 
-bool validateTargets(const TestResultTargets& targets, QString* errorMessage)
-{
-    if (!std::isfinite(targets.averageForceNewtons)
-        || targets.averageForceNewtons <= 0.0) {
-        setError(errorMessage, QStringLiteral("目标平均值必须大于 0 N。"));
-        return false;
-    }
-    if (!std::isfinite(targets.fluctuationRatePercent)
-        || targets.fluctuationRatePercent < 0.0
-        || targets.fluctuationRatePercent > 100.0) {
-        setError(errorMessage, QStringLiteral("目标波动率必须在 0% 到 100% 之间。"));
-        return false;
-    }
-
-    return true;
-}
-
 bool validateActualResult(const ActualTestResult& result, QString* errorMessage)
 {
     if (!std::isfinite(result.averageForceNewtons)
@@ -47,15 +30,38 @@ bool validateActualResult(const ActualTestResult& result, QString* errorMessage)
 
 } // namespace
 
-TestResultService::TestResultService(QObject* parent)
-    : QObject(parent)
+bool validateTestResultTargets(const TestResultTargets& targets,
+                               QString* errorMessage)
+{
+    if (!std::isfinite(targets.averageForceNewtons)
+        || targets.averageForceNewtons <= 0.0) {
+        setError(errorMessage, QStringLiteral("目标平均值必须大于 0 N。"));
+        return false;
+    }
+    if (!std::isfinite(targets.fluctuationRatePercent)
+        || targets.fluctuationRatePercent < 0.0
+        || targets.fluctuationRatePercent > 100.0) {
+        setError(errorMessage, QStringLiteral("目标波动率必须在 0% 到 100% 之间。"));
+        return false;
+    }
+
+    return true;
+}
+
+TestResultService& TestResultService::instance()
+{
+    static TestResultService service;
+    return service;
+}
+
+TestResultService::TestResultService()
 {
 }
 
 bool TestResultService::beginTest(const TestResultTargets& targets,
                                   QString* errorMessage)
 {
-    if (!validateTargets(targets, errorMessage)) {
+    if (!validateTestResultTargets(targets, errorMessage)) {
         return false;
     }
 

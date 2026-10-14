@@ -1,6 +1,7 @@
 #include "DataAcquisitionService.h"
 
 #include "../logging/AppLogger.h"
+#include "../machine/MachineStateManager.h"
 #include "../motion/AcsClient.h"
 
 #include <QMetaObject>
@@ -9,6 +10,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 
 namespace {
 
@@ -122,7 +124,7 @@ void DataAcquisitionService::initialize(AcsClient* client)
             this,
             &DataAcquisitionService::onConnectionChanged);
     connect(client_,
-            &AcsClient::controlBuffersRestartCompleted,
+            &AcsClient::controllerResetCompleted,
             this,
             &DataAcquisitionService::onControllerResetCompleted);
     connect(client_,
@@ -202,6 +204,12 @@ bool DataAcquisitionService::startCollection(QString* errorMessage)
         qCWarning(logAcquisition)
             << "[采集流程][启动请求] 拒绝：ACS 控制器未连接";
         setError(errorMessage, QStringLiteral("ACS 控制器未连接，不能启动采集。"));
+        return false;
+    }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Running, errorMessage)) {
+        qCWarning(logAcquisition)
+            << "[采集流程][启动请求] 拒绝：机器状态或安全回路不允许采集";
         return false;
     }
     if (state() != AcquisitionState::Idle) {
@@ -601,10 +609,6 @@ void DataAcquisitionService::onBlockRead(quint64 generation, const AcquisitionBl
     if (generation != generation_) {
         return;
     }
-    publishForcePositionSamples(block);
-    if (generation != generation_) {
-        return;
-    }
     pendingRead_ = PendingRead::None;
     qCDebug(logAcquisition)
         << "[采集流程][块消费] 数据已发布，立即查询下一块";
@@ -743,12 +747,37 @@ void DataAcquisitionService::requestCollectionControl(bool enabled)
     qCInfo(logAcquisition)
         << "[采集流程][控制请求] 入队，enabled=" << enabled
         << "state=" << acquisitionStateText(state());
+    quint64 commandEpoch = 0;
+    if (enabled) {
+        MachineStateManager& machineStateManager =
+            MachineStateManager::instance();
+        QString stateError;
+        if (!machineStateManager.canSubmitCommand(
+                MachineState::Running, &stateError)) {
+            onCollectionCommandFailed(generation_, stateError);
+            return;
+        }
+        commandEpoch = machineStateManager.commandEpoch();
+    }
     pendingControl_ = enabled ? PendingControl::Enable : PendingControl::Disable;
     const quint64 generation = generation_;
     const int session = controllerSession_;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, enabled, generation, session] {
+        [this, client = client_, enabled, commandEpoch, generation, session] {
+            if (enabled
+                && !MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Running)) {
+                const QString message = QStringLiteral(
+                    "机器状态已变化，队列中的旧采集启动命令已作废。");
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, generation, message] {
+                        onCollectionCommandFailed(generation, message);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
             client->setCollectionEnabled(enabled, generation, session);
         },
         Qt::QueuedConnection);
@@ -852,24 +881,4 @@ bool DataAcquisitionService::selectNextBlock(
             << "published=" << metadata.publishedSequence;
     }
     return false;
-}
-
-void DataAcquisitionService::publishForcePositionSamples(
-    const AcquisitionBlock& block)
-{
-    qCDebug(logAcquisition)
-        << "[采集流程][位移力数据发布] 开始，block=" << block.blockIndex
-        << "sequence=" << block.sequence
-        << "points=" << block.forceNewtons.size();
-    QVector<QPointF> samples;
-    samples.reserve(block.forceNewtons.size());
-    for (qsizetype index = 0; index < block.forceNewtons.size(); ++index) {
-        samples.append(QPointF(block.positionMeters.at(index),
-                               block.forceNewtons.at(index)));
-    }
-
-    qCDebug(logAcquisition)
-        << "[采集流程][位移力数据发布] 完成，sequence=" << block.sequence
-        << "points=" << samples.size();
-    emit forcePositionSamplesReady(samples);
 }

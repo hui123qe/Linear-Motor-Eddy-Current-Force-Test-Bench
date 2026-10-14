@@ -2,6 +2,7 @@
 
 #include "../config/TestParameters.h"
 #include "../logging/AppLogger.h"
+#include "../machine/MachineStateManager.h"
 
 #include <QMetaObject>
 
@@ -39,6 +40,7 @@ MotionControlService::MotionControlService()
     qRegisterMetaType<AcsSensorReadings>("AcsSensorReadings");
     qRegisterMetaType<MachineMode>("MachineMode");
     qRegisterMetaType<MaintenanceCommand>("MaintenanceCommand");
+    qRegisterMetaType<ProtectionStopResult>();
 
     client_->moveToThread(&workerThread_);
     connect(&workerThread_, &QThread::finished, client_, &QObject::deleteLater);
@@ -47,6 +49,7 @@ MotionControlService::MotionControlService()
             this,
             [this](bool connected, const QString& message) {
                 connected_ = connected;
+                if (!connected) { protectionStopped_ = false; }
                 if (!connected) {
                     maintenanceCommandPending_ = false;
                     forceTarePending_ = false;
@@ -111,14 +114,15 @@ MotionControlService::MotionControlService()
             this,
             &MotionControlService::sensorReadingsChanged);
     connect(client_,
-            &AcsClient::controlBuffersRestartCompleted,
+            &AcsClient::controllerResetCompleted,
             this,
             [this] {
                 maintenanceCommandPending_ = false;
+                protectionStopped_ = false;
                 emit controllerResetCompleted();
             });
     connect(client_,
-            &AcsClient::controlBuffersRestartFailed,
+            &AcsClient::controllerResetFailed,
             this,
             [this](const QString& message) {
                 maintenanceCommandPending_ = false;
@@ -136,6 +140,14 @@ MotionControlService::MotionControlService()
             &AcsClient::emergencyStopFailed,
             this,
             &MotionControlService::emergencyStopFailed);
+    connect(client_, &AcsClient::protectionStopResult, this,
+            &MotionControlService::protectionStopResult, Qt::DirectConnection);
+    connect(client_, &AcsClient::protectionStopResult, this, [this](const ProtectionStopResult& result) {
+        qCInfo(logMotion) << "故障停止反馈" << result.occurrenceId
+                         << "state=" << static_cast<int>(result.state) << result.detail;
+        protectionStopped_ = result.state == ProtectionStopState::Confirmed;
+        if (protectionStopped_) { maintenanceCommandPending_ = false; forceTarePending_ = false; }
+    });
     connect(client_,
             &AcsClient::forceTareStarted,
             this,
@@ -186,6 +198,24 @@ MotionControlService::MotionControlService()
             &AcsClient::commandFailed,
             this,
             &MotionControlService::commandFailed);
+
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    connect(&machineStateManager,
+            &MachineStateManager::machineStateChanged,
+            this,
+            [this](MachineState state, const QString& reason) {
+                if (state == MachineState::Error) {
+                    maintenanceCommandPending_ = false;
+                    forceTarePending_ = false;
+                    if (currentStatus_.homeRunning) {
+                        currentStatus_.homeRunning = false;
+                        emit homeRunningChanged(false);
+                    }
+                    emit safetyInhibitionChanged(true, reason);
+                } else if (state == MachineState::Idle) {
+                    emit safetyInhibitionChanged(false, reason);
+                }
+            });
 
     workerThread_.setObjectName(QStringLiteral("AcsMotionThread"));
 }
@@ -317,10 +347,31 @@ void MotionControlService::tareForceSensor()
         return;
     }
 
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    QString stateError;
+    if (!machineStateManager.canSubmitCommand(MachineState::Idle, &stateError)) {
+        qCWarning(logMotion).noquote() << stateError;
+        emit forceTareFailed(stateError);
+        return;
+    }
+    const quint64 commandEpoch = machineStateManager.commandEpoch();
+
     qCInfo(logMotion) << "请求启动 ACS Buffer 8 执行力传感器去皮";
     forceTarePending_ = true;
     QMetaObject::invokeMethod(
-        client_, &AcsClient::tareForceSensor, Qt::QueuedConnection);
+        client_,
+        [this, client = client_, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    &MotionControlService::rejectQueuedForceTare,
+                    Qt::QueuedConnection);
+                return;
+            }
+            client->tareForceSensor();
+        },
+        Qt::QueuedConnection);
 }
 
 MachineMode MotionControlService::machineMode() const
@@ -363,10 +414,33 @@ bool MotionControlService::enableAxis(QString* errorMessage)
         setError(errorMessage, QStringLiteral("轴当前已经使能。"));
         return false;
     }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
+
+    const quint64 commandEpoch =
+        MachineStateManager::instance().commandEpoch();
 
     qCInfo(logMotion) << "接受维修上使能请求";
     maintenanceCommandPending_ = true;
-    QMetaObject::invokeMethod(client_, &AcsClient::enableAxis, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        client_,
+        [this, client = client_, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this] {
+                        rejectQueuedMaintenanceCommand(
+                            MaintenanceCommand::EnableAxis);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
+            client->enableAxis();
+        },
+        Qt::QueuedConnection);
     return true;
 }
 
@@ -412,13 +486,31 @@ bool MotionControlService::homeAxis(QString* errorMessage)
         return false;
     }
 
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
+    const quint64 commandEpoch =
+        MachineStateManager::instance().commandEpoch();
+
     qCInfo(logMotion) << "接受维修回零请求";
     maintenanceCommandPending_ = true;
     currentStatus_.homeRunning = true;
     emit homeRunningChanged(true);
     QMetaObject::invokeMethod(
         client_,
-        [client = client_] {
+        [this, client = client_, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this] {
+                        rejectQueuedMaintenanceCommand(
+                            MaintenanceCommand::HomeAxis);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
             client->homeAxis();
         },
         Qt::QueuedConnection);
@@ -436,13 +528,31 @@ bool MotionControlService::moveRelative(double distanceMillimeters,
         setError(errorMessage, QStringLiteral("相对运动距离必须为非零有限数值。"));
         return false;
     }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
+
+    const quint64 commandEpoch =
+        MachineStateManager::instance().commandEpoch();
 
     qCInfo(logMotion)
         << "接受维修相对运动请求，distanceMm=" << distanceMillimeters;
     maintenanceCommandPending_ = true;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, distanceMillimeters] {
+        [this, client = client_, distanceMillimeters, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this] {
+                        rejectQueuedMaintenanceCommand(
+                            MaintenanceCommand::RelativeMove);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
             client->moveRelative(
                 distanceMillimeters,
                 kMaintenancePtpVelocityMillimetersPerSecond);
@@ -461,13 +571,31 @@ bool MotionControlService::moveAbsolute(double positionMillimeters,
         setError(errorMessage, QStringLiteral("绝对运动位置必须为有限数值。"));
         return false;
     }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
+
+    const quint64 commandEpoch =
+        MachineStateManager::instance().commandEpoch();
 
     qCInfo(logMotion)
         << "接受维修绝对运动请求，positionMm=" << positionMillimeters;
     maintenanceCommandPending_ = true;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, positionMillimeters] {
+        [this, client = client_, positionMillimeters, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this] {
+                        rejectQueuedMaintenanceCommand(
+                            MaintenanceCommand::AbsoluteMove);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
             client->moveAbsolute(
                 positionMillimeters,
                 kMaintenancePtpVelocityMillimetersPerSecond);
@@ -485,6 +613,13 @@ bool MotionControlService::startJog(int direction, QString* errorMessage)
         setError(errorMessage, QStringLiteral("JOG 方向必须为 -1 或 1。"));
         return false;
     }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Idle, errorMessage)) {
+        return false;
+    }
+
+    const quint64 commandEpoch =
+        MachineStateManager::instance().commandEpoch();
 
     const double velocityMillimetersPerSecond =
         direction * kMaintenanceJogVelocityMillimetersPerSecond;
@@ -494,7 +629,18 @@ bool MotionControlService::startJog(int direction, QString* errorMessage)
     maintenanceCommandPending_ = true;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, velocityMillimetersPerSecond] {
+        [this, client = client_, velocityMillimetersPerSecond, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Idle)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this] {
+                        rejectQueuedMaintenanceCommand(
+                            MaintenanceCommand::StartJog);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
             client->startJog(velocityMillimetersPerSecond);
         },
         Qt::QueuedConnection);
@@ -528,30 +674,38 @@ bool MotionControlService::resetController(QString* errorMessage)
         setError(errorMessage, QStringLiteral("ACS 电机服务尚未初始化。"));
         return false;
     }
-    if (!connected_ || !hasStatusSnapshot_) {
-        setError(errorMessage, QStringLiteral("ACS 控制器未连接或状态尚未就绪。"));
+    if (!connected_) {
+        setError(errorMessage, QStringLiteral("ACS 控制器未连接。"));
         return false;
     }
     if (maintenanceCommandPending_) {
         setError(errorMessage, QStringLiteral("上一条控制命令正在处理中。"));
         return false;
     }
-    if (currentStatus_.homeRunning) {
-        setError(errorMessage, QStringLiteral("机器正在回零，不能复位控制器。"));
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    if (!machineStateManager.canSubmitCommand(
+            MachineState::Resetting, errorMessage)) {
         return false;
     }
-    if (currentStatus_.state != 0) {
-        setError(
-            errorMessage,
-            QStringLiteral("机器当前处于运行状态 %1，不能复位控制器。")
-                .arg(currentStatus_.state));
-        return false;
-    }
+    const quint64 commandEpoch =
+        machineStateManager.commandEpoch();
 
-    qCWarning(logMotion) << "接受 ACS 复位请求：重启 Buffer 1、2、3";
+    qCWarning(logMotion) << "接受 ACS 控制器复位请求";
     maintenanceCommandPending_ = true;
     QMetaObject::invokeMethod(
-        client_, &AcsClient::restartControlBuffers, Qt::QueuedConnection);
+        client_,
+        [this, client = client_, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Resetting)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    &MotionControlService::rejectQueuedControllerReset,
+                    Qt::QueuedConnection);
+                return;
+            }
+            client->resetController();
+        },
+        Qt::QueuedConnection);
     return true;
 }
 
@@ -563,6 +717,22 @@ bool MotionControlService::homeDone() const
 bool MotionControlService::homeRunning() const
 {
     return connected_ && hasStatusSnapshot_ && currentStatus_.homeRunning;
+}
+
+bool MotionControlService::hasActiveMotion() const
+{
+    return currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
+        || (!protectionStopped_ && (maintenanceCommandPending_ || currentStatus_.homeRunning || isActiveState(currentStatus_.state)));
+}
+
+void MotionControlService::requestProtectionStop(const ProtectionStopRequest& request)
+{
+    if (!workerThread_.isRunning()) {
+        qCWarning(logMotion) << "故障停止请求失败：ACS 工作线程未启动" << request.occurrenceId;
+        emit protectionStopResult({request.occurrenceId, request.buffer, ProtectionStopState::Failed,
+            false, false, QStringLiteral("ACS 工作线程未启动")}); return;
+    }
+    QMetaObject::invokeMethod(client_, [client = client_, request] { client->stopConfiguredBufferAndKillAll(request); }, Qt::QueuedConnection);
 }
 
 bool MotionControlService::start(const TestParameters& parameters,
@@ -605,6 +775,13 @@ bool MotionControlService::start(const TestParameters& parameters,
         return false;
     }
 
+    MachineStateManager& machineStateManager = MachineStateManager::instance();
+    if (!machineStateManager.canSubmitCommand(
+            MachineState::Running, errorMessage)) {
+        return false;
+    }
+    const quint64 commandEpoch = machineStateManager.commandEpoch();
+
     const TestMotionParameters& selectedTest =
         parameters.selectedTestType == EddyCurrentTestType::RatedSpeed
             ? parameters.ratedSpeedTest
@@ -646,7 +823,15 @@ bool MotionControlService::start(const TestParameters& parameters,
         << "repeat=" << request.repeatCount;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, request] {
+        [this, client = client_, request, commandEpoch] {
+            if (!MachineStateManager::instance().commandAllowed(
+                    commandEpoch, MachineState::Running)) {
+                QMetaObject::invokeMethod(
+                    this,
+                    &MotionControlService::rejectQueuedAutomaticStart,
+                    Qt::QueuedConnection);
+                return;
+            }
             client->start(request);
         },
         Qt::QueuedConnection);
@@ -715,4 +900,45 @@ bool MotionControlService::validateMaintenanceCommand(
     }
 
     return true;
+}
+
+void MotionControlService::rejectQueuedForceTare()
+{
+    forceTarePending_ = false;
+    const QString message =
+        QStringLiteral("机器状态已变化，队列中的旧去皮命令已作废。");
+    qCWarning(logMotion).noquote() << message;
+    emit forceTareFailed(message);
+}
+
+void MotionControlService::rejectQueuedMaintenanceCommand(
+    MaintenanceCommand command)
+{
+    maintenanceCommandPending_ = false;
+    if (command == MaintenanceCommand::HomeAxis
+        && currentStatus_.homeRunning) {
+        currentStatus_.homeRunning = false;
+        emit homeRunningChanged(false);
+    }
+    const QString message =
+        QStringLiteral("机器状态已变化，队列中的旧维修命令已作废。");
+    qCWarning(logMotion).noquote() << message;
+    emit maintenanceCommandFailed(command, message);
+}
+
+void MotionControlService::rejectQueuedControllerReset()
+{
+    maintenanceCommandPending_ = false;
+    const QString message =
+        QStringLiteral("机器状态已变化，队列中的旧复位命令已作废。");
+    qCWarning(logMotion).noquote() << message;
+    emit controllerResetFailed(message);
+}
+
+void MotionControlService::rejectQueuedAutomaticStart()
+{
+    const QString message =
+        QStringLiteral("机器状态已变化，队列中的旧启动命令已作废。");
+    qCWarning(logMotion).noquote() << message;
+    emit commandFailed(message);
 }

@@ -21,7 +21,7 @@ if(NOT EXISTS "${DATABASE_CONFIGURATION_FILE}")
         "to config/database.json and provide the local credentials.")
 endif()
 
-find_package(Qt6 6.5.3 REQUIRED COMPONENTS Widgets PrintSupport Sql)
+find_package(Qt6 6.5.3 REQUIRED COMPONENTS Widgets PrintSupport Sql Network)
 
 if(NOT TARGET Qt6::QPSQLDriverPlugin)
     message(FATAL_ERROR "Qt QPSQL driver plugin target is unavailable.")
@@ -80,8 +80,22 @@ set_target_properties(ThirdParty::acscl PROPERTIES
 qt_add_executable(EddyCurrentBench
     WIN32
     src/main.cpp
+    src/globh.h
+    src/temperature/TemperatureTypes.h
+    src/temperature/TemperatureDeviceService.h
+    src/temperature/TemperatureDeviceService.cpp
+    src/alarm/AlarmTypes.h
+    src/alarm/AlarmMonitor.h
+    src/alarm/AlarmMonitor.cpp
+    src/alarm/AlarmService.h
+    src/alarm/AlarmService.cpp
     src/logging/AppLogger.h
     src/logging/AppLogger.cpp
+    src/machine/MachineStateManager.h
+    src/machine/MachineStateManager.cpp
+    src/safety/SafetyTypes.h
+    src/safety/SafetyMonitor.h
+    src/safety/SafetyMonitor.cpp
     src/config/TestParameters.h
     src/config/TestParameters.cpp
     src/config/TestConfigurationService.h
@@ -151,6 +165,7 @@ qt_add_executable(EddyCurrentBench
 target_link_libraries(EddyCurrentBench PRIVATE
     Qt6::Widgets
     Qt6::Sql
+    Qt6::Network
     QCustomPlot::QCustomPlot
     QXlsx::QXlsx
     ThirdParty::acscl
@@ -174,6 +189,9 @@ add_custom_command(TARGET EddyCurrentBench POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/config/motion.json"
         "$<TARGET_FILE_DIR:EddyCurrentBench>/motion.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::Network>"
+        "$<TARGET_FILE_DIR:EddyCurrentBench>/"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${DATABASE_CONFIGURATION_FILE}"
         "$<TARGET_FILE_DIR:EddyCurrentBench>/database.json"
@@ -202,6 +220,8 @@ install(FILES
 install(FILES "$<TARGET_FILE:Qt6::QPSQLDriverPlugin>"
     DESTINATION bin/sqldrivers
 )
+
+install(FILES "$<TARGET_FILE:Qt6::Network>" DESTINATION bin)
 
 foreach(POSTGRESQL_RUNTIME_DLL IN LISTS POSTGRESQL_RUNTIME_DLLS)
     install(FILES "${POSTGRESQL_RUNTIME_DIR}/${POSTGRESQL_RUNTIME_DLL}"

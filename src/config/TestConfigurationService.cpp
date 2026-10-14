@@ -4,6 +4,12 @@
 
 #include <utility>
 
+TestConfigurationService& TestConfigurationService::instance()
+{
+    static TestConfigurationService service;
+    return service;
+}
+
 TestConfigurationService::TestConfigurationService(TestParametersStore store)
     : store_(std::move(store))
 {

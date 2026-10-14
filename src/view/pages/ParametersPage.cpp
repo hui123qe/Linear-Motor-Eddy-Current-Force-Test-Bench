@@ -541,7 +541,9 @@ void ParametersPage::saveParameters()
     }
 
     QString errorMessage;
-    if (!configurationService_.saveConfiguration(
+    TestConfigurationService& configurationService =
+        TestConfigurationService::instance();
+    if (!configurationService.saveConfiguration(
             currentParameters(), &errorMessage)) {
         qCWarning(logConfiguration).noquote()
             << "保存测试配置失败：" << errorMessage;
@@ -551,19 +553,20 @@ void ParametersPage::saveParameters()
 
     publishDisplayConfiguration();
     qCInfo(logConfiguration).noquote()
-        << "测试配置已保存" << configurationService_.configurationFilePath();
+        << "测试配置已保存" << configurationService.configurationFilePath();
     QMessageBox::information(
         this,
         QStringLiteral("保存配置"),
         QStringLiteral("配置已保存到：\n%1")
-            .arg(configurationService_.configurationFilePath()));
+            .arg(configurationService.configurationFilePath()));
 }
 
 void ParametersPage::confirmParameters()
 {
     const TestParameters parameters = currentParameters();
     QString errorMessage;
-    if (!configurationService_.lockConfiguration(parameters, &errorMessage)) {
+    if (!TestConfigurationService::instance().lockConfiguration(
+            parameters, &errorMessage)) {
         qCWarning(logConfiguration).noquote()
             << "锁定测试配置失败：" << errorMessage;
         QMessageBox::warning(this, QStringLiteral("确定配置失败"), errorMessage);
@@ -583,7 +586,7 @@ void ParametersPage::resetParameters()
         return;
     }
 
-    configurationService_.unlockConfiguration();
+    TestConfigurationService::instance().unlockConfiguration();
     setConfigurationLocked(false);
     publishDisplayConfiguration();
     emit configurationLockChanged(false);
@@ -593,7 +596,9 @@ void ParametersPage::resetParameters()
 void ParametersPage::loadConfigurationAtStartup()
 {
     QString errorMessage;
-    if (!configurationService_.loadSavedConfiguration(&errorMessage)) {
+    TestConfigurationService& configurationService =
+        TestConfigurationService::instance();
+    if (!configurationService.loadSavedConfiguration(&errorMessage)) {
         qCWarning(logConfiguration).noquote()
             << "自动加载测试配置失败：" << errorMessage;
         emit configurationCleared();
@@ -601,20 +606,20 @@ void ParametersPage::loadConfigurationAtStartup()
             this,
             QStringLiteral("自动加载配置失败"),
             QStringLiteral("未能从以下文件加载配置，工作台将显示 ----：\n%1\n\n%2")
-                .arg(configurationService_.configurationFilePath(), errorMessage));
+                .arg(configurationService.configurationFilePath(), errorMessage));
         return;
     }
 
     const std::optional<TestParameters> savedConfiguration =
-        configurationService_.savedConfiguration();
+        configurationService.savedConfiguration();
     if (savedConfiguration.has_value()) {
         setConfiguration(*savedConfiguration);
         qCInfo(logConfiguration).noquote()
-            << "测试配置已加载" << configurationService_.configurationFilePath();
+            << "测试配置已加载" << configurationService.configurationFilePath();
     } else {
         qCInfo(logConfiguration).noquote()
             << "未找到已保存的测试配置"
-            << configurationService_.configurationFilePath();
+            << configurationService.configurationFilePath();
     }
     publishDisplayConfiguration();
 }
@@ -622,7 +627,7 @@ void ParametersPage::loadConfigurationAtStartup()
 void ParametersPage::publishDisplayConfiguration()
 {
     const std::optional<TestParameters> configuration =
-        configurationService_.displayConfiguration();
+        TestConfigurationService::instance().displayConfiguration();
     if (configuration.has_value()) {
         emit configurationChanged(*configuration);
         return;
