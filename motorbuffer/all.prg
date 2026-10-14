@@ -1,15 +1,15 @@
 #/ Controller version = 4.20.01
-#/ Date = 9/30/2026 6:11 PM
+#/ Date = 10/14/2026 5:31 PM
 #/ User remarks = 
 #1
-!PNAME=
+!PNAME=IO Mapping
 !PDESC=
 AUTOEXEC:
 
 TILL ECST.#OP = 1
 
 
-EC_DOUT3.4=0!力传感器去皮
+
 ECOUT(208,EC_DOUT3)
 
 
@@ -289,6 +289,16 @@ ACC(X) = L_POSITION_ACC
 DEC(X) = L_POSITION_DEC
 JERK(X) = L_POSITION_JERK
 
+ACC(0)=Mass_Factor*ACC(X)
+DEC(0)=Mass_Factor*DEC(X)
+VEL(0)=Mass_Factor*VEL(X)
+JERK(0)=Mass_Factor*JERK(X)
+
+ACC(1)=Mass_Factor*ACC(X)
+DEC(1)=Mass_Factor*DEC(X)
+VEL(1)=Mass_Factor*VEL(X)
+JERK(1)=Mass_Factor*JERK(X)
+
 
 ! 绝对位置运动到零点。
 !
@@ -299,7 +309,10 @@ JERK(X) = L_POSITION_JERK
 !   当前 Buffer 等待运动结束以后，
 !   才继续执行下一条程序。
 !
-PTP/e X, L_ZERO_POS
+PTP X, L_ZERO_POS
+PTP 0, L_ZERO_POS
+PTP 1, L_ZERO_POS
+TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 
 
 ! 启动 Buffer 去皮
@@ -329,8 +342,25 @@ DEC(X) = L_POSITION_DEC
 JERK(X) = L_POSITION_JERK
 
 
+ACC(0)=Mass_Factor*ACC(X)
+DEC(0)=Mass_Factor*DEC(X)
+VEL(0)=Mass_Factor*VEL(X)
+JERK(0)=Mass_Factor*JERK(X)
+
+ACC(1)=Mass_Factor*ACC(X)
+DEC(1)=Mass_Factor*DEC(X)
+VEL(1)=Mass_Factor*VEL(X)
+JERK(1)=Mass_Factor*JERK(X)
+
+
+
 ! 从当前位置运动开始位置起点。
-PTP/e X, L_START_POS
+
+PTP 0, -L_START_POS*Mass_Factor
+PTP 1, -L_START_POS*Mass_Factor
+PTP X, L_START_POS
+
+TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 
 IF G_ABORT_LATCH <> 0
     GOTO HANDLE_ABORT
@@ -372,8 +402,25 @@ DEC(X) = L_TEST_DEC
 JERK(X) = L_TEST_JERK
 
 
+ACC(0)=Mass_Factor*ACC(X)
+DEC(0)=Mass_Factor*DEC(X)
+VEL(0)=Mass_Factor*VEL(X)
+JERK(0)=Mass_Factor*JERK(X)
+
+ACC(1)=Mass_Factor*ACC(X)
+DEC(1)=Mass_Factor*DEC(X)
+VEL(1)=Mass_Factor*VEL(X)
+JERK(1)=Mass_Factor*JERK(X)
+
+
+
+
 ! 执行正式测试运动。
-PTP/e X, L_END_POS
+PTP 0, -L_END_POS*Mass_Factor
+PTP 1, -L_END_POS*Mass_Factor
+PTP X, L_END_POS
+
+TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 
 IF G_ABORT_LATCH <> 0
     GOTO HANDLE_ABORT
@@ -404,7 +451,21 @@ ACC(X) = L_TEST_ACC
 DEC(X) = L_TEST_DEC
 JERK(X) = L_TEST_JERK
 
-PTP/e X, L_START_POS
+
+ACC(0)=Mass_Factor*ACC(X)
+DEC(0)=Mass_Factor*DEC(X)
+VEL(0)=Mass_Factor*VEL(X)
+JERK(0)=Mass_Factor*JERK(X)
+
+ACC(1)=Mass_Factor*ACC(X)
+DEC(1)=Mass_Factor*DEC(X)
+VEL(1)=Mass_Factor*VEL(X)
+JERK(1)=Mass_Factor*JERK(X)
+
+PTP X, L_START_POS
+PTP 0, -L_START_POS*Mass_Factor
+PTP 1, -L_START_POS*Mass_Factor
+TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 
 IF G_ABORT_LATCH <> 0
     GOTO HANDLE_ABORT
@@ -448,8 +509,22 @@ DEC(X) = L_POSITION_DEC
 JERK(X) = L_POSITION_JERK
 
 
+ACC(0)=Mass_Factor*ACC(X)
+DEC(0)=Mass_Factor*DEC(X)
+VEL(0)=Mass_Factor*VEL(X)
+JERK(0)=Mass_Factor*JERK(X)
+
+ACC(1)=Mass_Factor*ACC(X)
+DEC(1)=Mass_Factor*DEC(X)
+VEL(1)=Mass_Factor*VEL(X)
+JERK(1)=Mass_Factor*JERK(X)
+
+
 ! 返回机械零点位置。
-PTP/e X, L_ZERO_POS
+PTP X, L_ZERO_POS
+PTP 0, L_ZERO_POS
+PTP 1, L_ZERO_POS
+TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 
 
 ! 返回过程中可能收到停止请求。
@@ -560,11 +635,14 @@ GOTO WAIT_START
 !============================================================
 AUTOEXEC:
 
+! Host request / controller initialization acknowledgement (positive session ID).
+GLOBAL INT DC_SESSION_REQUEST
+GLOBAL INT DC_SESSION_ACK
+
 DCCOUNT = 0
 DCSTART_CON = 0
 DC_SESSION_REQUEST = 0
 DC_SESSION_ACK = 0
-
 
 DC_ACTIVE_BLOCK = 0
 DC_FINISHED_BLOCK = 0
@@ -579,9 +657,10 @@ WHILE 1
     !--------------------------------------------------------
 
     TILL DCSTART_CON = 1
-
-    ! Mark metadata unavailable while initializing the requested session.
+	
+	! Mark metadata unavailable while initializing the requested session.
     DC_SESSION_ACK = 0
+
 
     !--------------------------------------------------------
     ! Reset the new collection session
@@ -622,17 +701,12 @@ WHILE 1
     DC_BLOCK_SEQ_MAP(3) = 0
     DC_BLOCK_SEQ_MAP(4) = 0
 
+
     ! Publish only after all old block metadata has been cleared.
     DC_SESSION_ACK = DC_SESSION_REQUEST
-
-
     !--------------------------------------------------------
     ! Wait for Axis  to start moving
     !--------------------------------------------------------
-    WHILE DCSTART_CON & ^AST(X).#MOVE
-        WAIT 1
-    END
-
 
 
    !--------------------------------------------------------
@@ -679,9 +753,9 @@ WHILE 1
             DC DC_Data_5, ARRAYCOUNT, 1, FACC(X), FVEL(X), MOTOR_CURRENT, MOTOR_TEMPERATURE, EC_AIN9, FPOS(X)
 
         END
-
-
-        ! 2026-10-12 stop-race fix:
+		
+		
+		        ! 2026-10-12 stop-race fix:
         ! DCSTART_CON may become 0 after the WHILE condition was accepted
         ! but before DC becomes active. In that window the ON handler sees
         ! S_ST.#DC = 0 and cannot stop the collection that starts afterward.
@@ -689,6 +763,8 @@ WHILE 1
         IF ^DCSTART_CON & S_ST.#DC
             STOPDC
         END
+
+
 
 
         ! Wait until collection finishes or is stopped
@@ -859,7 +935,7 @@ MFLAGS3.25=0
 
 ERRORUNMAP Axis3, Y3_Zone
 WAIT 100
-Y3_Homeoffset=-5
+Y3_Homeoffset=Home_Offset
 FCLEAR ALL
 !homing
 ACC(Axis3)=500
@@ -879,8 +955,19 @@ TILL MST(Axis3).#ENABLED
 !XCURV(2)=100; XCURI(2)=50;
 
 HOME Axis3,17,20,3600,Y3_Homeoffset
+
 TILL MFLAGS(Axis3).#HOME=1
-PTP/E Axis3,0
+SET FPOS(3)=FPOS(2)
+
+!WAIT 500
+!
+!DISABLE Axis3
+!Axis3=3
+!ENABLE Axis3
+!HOME Axis3,17,20,3600,Y3_Homeoffset
+!TILL MFLAGS(Axis3).#HOME=1
+
+WAIT 500
 
 !STOP
 
@@ -889,8 +976,10 @@ DISABLE(2,3)
 MFLAGS2.25=1
 MFLAGS3.25=1
 wait 100
-ENABLE (2,3)
-PTP/E Axis3,0
+ENABLE Axis3
+
+!Axis3=2
+PTP/v Axis3,0,100
 
 
 
@@ -947,58 +1036,85 @@ STOP
 #6
 !PNAME=Y1&Y2 Homing
 !PDESC=
-INT Axis
+INT Axis0 
+INT Axis1
+GLOBAL INT Y1_ErrCompensation,Y1_Zone,Y2_ErrCompensation,Y2_Zone
+GLOBAL REAL Y1_Base,Y1_Increment,Y1_Homeoffset,Y2_Base,Y2_Increment,Y2_Homeoffset
 
-GLOBAL INT Y_ErrCompensation,Y_Zone
-GLOBAL REAL Y_Base,Y_Increment,Y_Homeoffset
+!Y1
+Axis0=0
+Axis1=1
+Y1_ErrCompensation = 0
+Y2_ErrCompensation = 0
+Y1_Zone =0 !NO CHANGE
+Y2_Zone =0
 
-Axis=0
-Y_ErrCompensation = 0
-Y_Zone =0 !NO CHANGE
+!DISABLE (0,1)
+!MFLAGS0.25=0
+!MFLAGS1.25=0
 
-ERRORUNMAP Axis, Y_Zone
+ERRORUNMAP Axis0, Y1_Zone
+ERRORUNMAP Axis1, Y2_Zone 
 WAIT 100
-Y_Homeoffset=5
+Y1_Homeoffset=-Home_Offset
+Y2_Homeoffset=-Home_Offset
 FCLEAR ALL
 !homing
-ACC(Axis)=200
-DEC(Axis)=200
-JERK(Axis)=2000
+ACC(Axis0)=200
+DEC(Axis0)=200
+JERK(Axis0)=2000
+ACC(Axis1)=200
+DEC(Axis1)=200
+JERK(Axis1)=2000
 
 !!!!Decrease PID before Servo On !!!
 !!SLVKP(2)=100;SLVKI(2)=0;SLPKP(2)=50;SLVSOF(2)=400;SLVSOFD(0)=0.7 
 !SLVKP(2)=200;SLVKI(2)=0;SLAFF(2)=50;SLSBORD(2)=0;SLSBBW(2)=80;SLSBF(2)=110;
 !XCURV(2)=20; XCURI(2)=10;
 
-ENABLE Axis
-TILL MST(Axis).#ENABLED
+ENABLE Axis0
+ENABLE Axis1
+TILL MST(Axis0).#ENABLED
+TILL MST(Axis1).#ENABLED
 
 !!!!Recover normal PID After Servo On!!!
 !SLVKP(2)=1200;SLVKI(2)=150;SLPKP(2)=50;SLVSOF(2)=400;SLVSOFD(0)=0.7 
 !XCURV(2)=100; XCURI(2)=50;
 
-HOME Axis,18,10,2000,Y_Homeoffset
-TILL MFLAGS(Axis).#HOME=1
-PTP/E Axis,0
-STOP
+HOME Axis0,18,10,2000,Y1_Homeoffset
+HOME Axis1,18,10,2000,Y2_Homeoffset
+TILL MFLAGS(Axis0).#HOME=1
+TILL MFLAGS(Axis1).#HOME=1
+
+!DISABLE(0,1)
+!
+!
+!MFLAGS0.25=1
+!MFLAGS1.25=1
+!wait 100
+!ENABLE (0,1)
+PTP/v Axis0,0,100
+PTP/v Axis1,0,100
+
+!STOP
 
 Disp "Homing successful!"
-if Y_ErrCompensation = 1
+if Y1_ErrCompensation = 1
         DISP "Enable the compensation mode."
         DISP "EYecute the compensation prcoess......"
-        CALL Y_ErrorCompensate       ;
+        CALL Y1_ErrorCompensate       ;
 else
         DISP "Error compensation disabled!"
 end
 
 !STOP
 
-Y_ErrorCompensate:
+Y1_ErrorCompensate:
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !dYnamic error compensation FOR AYis 0 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-Y_Base = -66
-Y_Increment = 20
+Y1_Base = -66
+Y1_Increment = 20
 
 Y1Y2_CORRECTION_MAP(0)=        0       ;
 Y1Y2_CORRECTION_MAP(1)=        0        ;
@@ -1029,9 +1145,9 @@ Y1Y2_CORRECTION_MAP(25)=        0         ;
 Y1Y2_CORRECTION_MAP(26)=        0         ;
 
 
-ERRORUNMAP 0, Y_Zone
-ERRORMAP1D 0, Y_Zone, Y_Base, Y_Increment, Y1Y2_CORRECTION_MAP
-ERRORMAPON 0, Y_Zone
+ERRORUNMAP 0, Y1_Zone
+ERRORMAP1D 0, Y1_Zone, Y1_Base, Y1_Increment, Y1Y2_CORRECTION_MAP
+ERRORMAPON 0, Y1_Zone
 
 STOP
 #7
@@ -1069,10 +1185,8 @@ TILL (PST(5).#RUN = 0)
 
 
 
-!START 6, 1
-!TILL （PST(6).#RUN = 0）
-
-
+START 6, 1
+TILL (PST(6).#RUN = 0)
 
 ! ---------- 全部成功 ----------
 HomeDone = 1
@@ -1109,6 +1223,42 @@ WAIT 100
 
 ! 释放去皮信号，为下一次触发做准备
 EC_DOUT3.4 = 0
+
+STOP
+#9
+!PNAME=Balance_Mass
+!PDESC=
+int i=0
+WHILE (i<Cycle_No)
+
+ACC(0)=Mass_Factor*ACC(2)
+DEC(0)=Mass_Factor*DEC(2)
+VEL(0)=Mass_Factor*VEL(2)
+JERK(0)=Mass_Factor*JERK(2)
+
+ACC(1)=Mass_Factor*ACC(2)
+DEC(1)=Mass_Factor*DEC(2)
+VEL(1)=Mass_Factor*VEL(2)
+JERK(1)=Mass_Factor*JERK(2)
+
+
+
+PTP 0,-Mass_Factor*RPosition_Gantry
+PTP 1,-Mass_Factor*RPosition_Gantry 
+PTP 2,RPosition_Gantry
+
+TILL MST(2).4=1&MST(1).4=1&MST(0).4=1
+WAIT 1500 
+
+PTP 0,0
+PTP 1,0
+PTP 2,0
+
+TILL MST(2).4=1&MST(1).4=1&MST(0).4=1
+WAIT 1500
+i++  
+
+END
 
 STOP
 #A
@@ -1163,8 +1313,8 @@ GLOBAL REAL G_TEST_VEL=100
 GLOBAL INT G_REPEAT_COUNT =10
 
 ! 每段正向或反向实验结束后的结果处理等待时间。
-! WAIT 2000 targets about 2 seconds for states 55 and 75.
-GLOBAL REAL G_RESULT_WAIT = 2000
+! 当前控制器程序周期按 40 ms 计算，125 个周期约为 5 秒。
+GLOBAL REAL G_RESULT_WAIT = 3000
 
 
 
@@ -1298,10 +1448,6 @@ GLOBAL INT DCCOUNT
 ! Master data collection control flag
 GLOBAL INT DCSTART_CON
 
-! Host request / controller initialization acknowledgement (positive session ID).
-GLOBAL INT DC_SESSION_REQUEST
-GLOBAL INT DC_SESSION_ACK
-
 ! First-start motion waiting flag
 GLOBAL INT DCSTART
 
@@ -1359,3 +1505,10 @@ GLOBAL INT DC_BLOCK_PARTIAL_MAP(5)
 GLOBAL REAL STATIC Y1Y2_CORRECTION_MAP (47)
 GLOBAL REAL STATIC Y3Y4_CORRECTION_MAP (47)
 !GLOBAL REAL X_Acc,Y_Acc,Z_Acc
+
+
+
+global REAL RPosition_Gantry=1700     !龙门轴的运动位置
+GLOBAL REAL Home_Offset=0       !龙门轴的回零偏移量
+GLOBAL REAL Mass_Factor=0.15         !平衡质量因数
+GLOBAl INT Cycle_No=1                !循环次数
