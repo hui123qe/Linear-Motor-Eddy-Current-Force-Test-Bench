@@ -78,9 +78,9 @@ public slots:
     void haltAxis();
     void start(const MotionStartRequest& request);
     void stop();
-    void setCollectionEnabled(bool enabled);
-    void readCollectionMetadata();
-    void readCollectionBlock(int blockIndex, int expectedSequence);
+    void setCollectionEnabled(bool enabled, quint64 generation = 0, int session = 0);
+    void readCollectionMetadata(quint64 generation);
+    void readCollectionBlock(int blockIndex, int expectedSequence, quint64 generation, int session);
 
 signals:
     void connectionChanged(bool connected, const QString& message);
@@ -98,13 +98,13 @@ signals:
     void startRequestWritten();
     void stopRequestWritten();
     void commandFailed(const QString& message);
-    void collectionControlWritten(bool enabled);
-    void collectionMetadataRead(const AcsCollectionMetadata& metadata);
-    void collectionBlockRead(const AcquisitionBlock& block);
-    void collectionBlockRejected(int blockIndex,
+    void collectionControlWritten(quint64 generation, bool enabled);
+    void collectionMetadataRead(quint64 generation, const AcsCollectionMetadata& metadata);
+    void collectionBlockRead(quint64 generation, const AcquisitionBlock& block);
+    void collectionBlockRejected(quint64 generation, int blockIndex,
                                  int expectedSequence,
                                  const QString& message);
-    void collectionCommandFailed(const QString& message);
+    void collectionCommandFailed(quint64 generation, const QString& message);
 
 private slots:
     void pollStatus();

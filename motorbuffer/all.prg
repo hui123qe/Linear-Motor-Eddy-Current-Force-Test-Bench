@@ -562,6 +562,8 @@ AUTOEXEC:
 
 DCCOUNT = 0
 DCSTART_CON = 0
+DC_SESSION_REQUEST = 0
+DC_SESSION_ACK = 0
 
 
 DC_ACTIVE_BLOCK = 0
@@ -577,6 +579,9 @@ WHILE 1
     !--------------------------------------------------------
 
     TILL DCSTART_CON = 1
+
+    ! Mark metadata unavailable while initializing the requested session.
+    DC_SESSION_ACK = 0
 
     !--------------------------------------------------------
     ! Reset the new collection session
@@ -616,6 +621,9 @@ WHILE 1
     DC_BLOCK_SEQ_MAP(2) = 0
     DC_BLOCK_SEQ_MAP(3) = 0
     DC_BLOCK_SEQ_MAP(4) = 0
+
+    ! Publish only after all old block metadata has been cleared.
+    DC_SESSION_ACK = DC_SESSION_REQUEST
 
 
     !--------------------------------------------------------
@@ -1279,6 +1287,10 @@ GLOBAL INT DCCOUNT
 
 ! Master data collection control flag
 GLOBAL INT DCSTART_CON
+
+! Host request / controller initialization acknowledgement (positive session ID).
+GLOBAL INT DC_SESSION_REQUEST
+GLOBAL INT DC_SESSION_ACK
 
 ! First-start motion waiting flag
 GLOBAL INT DCSTART

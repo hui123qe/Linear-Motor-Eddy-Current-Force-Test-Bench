@@ -37,13 +37,13 @@ signals:
 private slots:
     void requestMetadata();
     void onConnectionChanged(bool connected, const QString& message);
-    void onCollectionControlWritten(bool enabled);
-    void onMetadataRead(const AcsCollectionMetadata& metadata);
-    void onBlockRead(const AcquisitionBlock& block);
-    void onBlockRejected(int blockIndex,
+    void onCollectionControlWritten(quint64 generation, bool enabled);
+    void onMetadataRead(quint64 generation, const AcsCollectionMetadata& metadata);
+    void onBlockRead(quint64 generation, const AcquisitionBlock& block);
+    void onBlockRejected(quint64 generation, int blockIndex,
                          int expectedSequence,
                          const QString& message);
-    void onCollectionCommandFailed(const QString& message);
+    void onCollectionCommandFailed(quint64 generation, const QString& message);
 
 private:
     DataAcquisitionService();
@@ -53,6 +53,8 @@ private:
     DataAcquisitionService& operator=(const DataAcquisitionService&) = delete;
 
     void setState(AcquisitionState state);
+    void invalidateRequests();
+    void finishCollection();
     void failCollection(const QString& message);
     void requestCollectionControl(bool enabled);
     void requestBlock(int blockIndex, int expectedSequence);
@@ -68,5 +70,14 @@ private:
     bool initialized_ = false;
     bool connected_ = false;
     int lastConsumedSequence_ = 0;
+    quint64 generation_ = 0;
+    int controllerSession_ = 0;
+    bool metadataInFlight_ = false;
+    bool blockInFlight_ = false;
+    bool controlInFlight_ = false;
+    bool startCommandSent_ = false;
+    bool sessionConfirmed_ = false;
+    bool stopCommandSent_ = false;
+    QElapsedTimer startingTimer_;
     QElapsedTimer stoppingTimer_;
 };

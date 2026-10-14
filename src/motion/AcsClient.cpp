@@ -71,7 +71,7 @@ QString integerArrayText(
 QString metadataText(const AcsCollectionMetadata& metadata)
 {
     return QStringLiteral(
-               "control=%1 active=%2 finished=%3 published=%4 "
+               "sessionBefore=%10 sessionAfter=%11 control=%1 active=%2 finished=%3 published=%4 "
                "finishedCount=%5 finishedPartial=%6 validCounts=%7 "
                "partialFlags=%8 blockSequences=%9")
         .arg(metadata.controlEnabled)
@@ -82,7 +82,9 @@ QString metadataText(const AcsCollectionMetadata& metadata)
         .arg(metadata.finishedPartial ? 1 : 0)
         .arg(integerArrayText(metadata.validCounts))
         .arg(integerArrayText(metadata.partialFlags))
-        .arg(integerArrayText(metadata.blockSequences));
+        .arg(integerArrayText(metadata.blockSequences))
+        .arg(metadata.sessionBefore)
+        .arg(metadata.sessionAfter);
 }
 
 } // namespace
@@ -493,7 +495,7 @@ void AcsClient::stop()
     emit stopRequestWritten();
 }
 
-void AcsClient::setCollectionEnabled(bool enabled)
+void AcsClient::setCollectionEnabled(bool enabled, quint64 generation, int session)
 {
     qCInfo(logAcquisition)
         << "[采集流程][ACS 控制写入] 开始，DCSTART_CON="
@@ -501,36 +503,41 @@ void AcsClient::setCollectionEnabled(bool enabled)
     if (controllerHandle_ == ACSC_INVALID) {
         qCCritical(logAcquisition)
             << "[采集流程][ACS 控制写入] 失败：控制器未连接";
-        emit collectionCommandFailed(
+        emit collectionCommandFailed(generation,
             QStringLiteral("ACS 控制器未连接，不能更改采集状态。"));
         return;
     }
 
     QString errorMessage;
-    if (!writeInteger("DCSTART_CON", enabled ? 1 : 0, &errorMessage)) {
+    if (enabled && session <= 0) {
+        emit collectionCommandFailed(generation, QStringLiteral("采集会话请求号必须为正数。"));
+        return;
+    }
+    if ((enabled && !writeInteger("DC_SESSION_REQUEST", session, &errorMessage))
+        || !writeInteger("DCSTART_CON", enabled ? 1 : 0, &errorMessage)) {
         qCCritical(logAcquisition).noquote()
             << "[采集流程][ACS 控制写入] SDK 写入失败，message="
             << errorMessage;
-        emit collectionCommandFailed(errorMessage);
+        emit collectionCommandFailed(generation, errorMessage);
         return;
     }
 
     qCInfo(logAcquisition)
         << "[采集流程][ACS 控制写入] 成功并发送回执，DCSTART_CON="
         << (enabled ? 1 : 0);
-    emit collectionControlWritten(enabled);
+    emit collectionControlWritten(generation, enabled);
 }
 
-void AcsClient::readCollectionMetadata()
+void AcsClient::readCollectionMetadata(quint64 generation)
 {
     QElapsedTimer readTimer;
     readTimer.start();
     qCDebug(logAcquisition)
-        << "[采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组";
+        << "[采集流程][ACS 元数据读取] 开始：读取会话回执、状态标量和块数组";
     if (controllerHandle_ == ACSC_INVALID) {
         qCCritical(logAcquisition)
             << "[采集流程][ACS 元数据读取] 失败：控制器未连接";
-        emit collectionCommandFailed(
+        emit collectionCommandFailed(generation,
             QStringLiteral("ACS 控制器未连接，不能读取采集元数据。"));
         return;
     }
@@ -539,7 +546,8 @@ void AcsClient::readCollectionMetadata()
     int finishedPartial = 0;
     QString errorMessage;
     const bool readSucceeded =
-        readInteger("DCSTART_CON", &metadata.controlEnabled, &errorMessage)
+        readInteger("DC_SESSION_ACK", &metadata.sessionBefore, &errorMessage)
+        && readInteger("DCSTART_CON", &metadata.controlEnabled, &errorMessage)
         && readInteger("DC_ACTIVE_BLOCK", &metadata.activeBlock, &errorMessage)
         && readInteger("DC_FINISHED_BLOCK", &metadata.finishedBlock, &errorMessage)
         && readInteger(
@@ -563,13 +571,14 @@ void AcsClient::readCollectionMetadata()
             0,
             kAcquisitionBlockCount - 1,
             metadata.blockSequences.data(),
-            &errorMessage);
+            &errorMessage)
+        && readInteger("DC_SESSION_ACK", &metadata.sessionAfter, &errorMessage);
     if (!readSucceeded) {
         qCCritical(logAcquisition).noquote()
             << "[采集流程][ACS 元数据读取] SDK 读取失败，elapsedMs="
             << readTimer.elapsed()
             << "message=" << errorMessage;
-        emit collectionCommandFailed(errorMessage);
+        emit collectionCommandFailed(generation, errorMessage);
         return;
     }
 
@@ -578,10 +587,10 @@ void AcsClient::readCollectionMetadata()
         << "[采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs="
         << readTimer.elapsed()
         << metadataText(metadata);
-    emit collectionMetadataRead(metadata);
+    emit collectionMetadataRead(generation, metadata);
 }
 
-void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
+void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence, quint64 generation, int session)
 {
     QElapsedTimer readTimer;
     readTimer.start();
@@ -593,7 +602,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "[采集流程][ACS 块读取] 失败：控制器未连接，block="
             << blockIndex
             << "expected=" << expectedSequence;
-        emit collectionCommandFailed(
+        emit collectionCommandFailed(generation,
             QStringLiteral("ACS 控制器未连接，不能读取采集块。"));
         return;
     }
@@ -603,13 +612,22 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "[采集流程][ACS 块读取] 参数无效，block=" << blockIndex
             << "expected=" << expectedSequence
             << "blockCount=" << kAcquisitionBlockCount;
-        emit collectionCommandFailed(
+        emit collectionCommandFailed(generation,
             QStringLiteral("采集块读取参数无效：block=%1，sequence=%2。")
                 .arg(blockIndex)
                 .arg(expectedSequence));
         return;
     }
 
+    QString sessionError;
+    int initialSession = 0;
+    if (!readInteger("DC_SESSION_ACK", &initialSession, &sessionError)
+        || initialSession != session) {
+        emit collectionCommandFailed(generation,
+            QStringLiteral("读取数据块前控制器会话不匹配：expected=%1，actual=%2。%3")
+                .arg(session).arg(initialSession).arg(sessionError));
+        return;
+    }
     const int metadataIndex = blockIndex - 1;
     // 先读取块所属序号和有效点数，确认控制器此刻没有写该块。
     qCDebug(logAcquisition)
@@ -647,7 +665,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "expected=" << expectedSequence
             << "elapsedMs=" << readTimer.elapsed()
             << "message=" << errorMessage;
-        emit collectionCommandFailed(errorMessage);
+        emit collectionCommandFailed(generation, errorMessage);
         return;
     }
 
@@ -674,7 +692,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "activeBefore=" << activeBlockBefore
             << "sequenceBefore=" << sequenceBefore
             << "validCountBefore=" << validCountBefore;
-        emit collectionBlockRejected(
+        emit collectionBlockRejected(generation,
             blockIndex,
             expectedSequence,
             QStringLiteral("读取前校验失败：active=%1，sequence=%2，count=%3。")
@@ -708,7 +726,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "sequence=" << sequenceBefore
             << "elapsedMs=" << readTimer.elapsed()
             << "message=" << errorMessage;
-        emit collectionCommandFailed(errorMessage);
+        emit collectionCommandFailed(generation, errorMessage);
         return;
     }
     qCInfo(logAcquisition)
@@ -745,7 +763,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "expected=" << expectedSequence
             << "elapsedMs=" << readTimer.elapsed()
             << "message=" << errorMessage;
-        emit collectionCommandFailed(errorMessage);
+        emit collectionCommandFailed(generation, errorMessage);
         return;
     }
     qCDebug(logAcquisition)
@@ -769,13 +787,22 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
             << "sequenceAfter=" << sequenceAfter
             << "validCountBefore=" << validCountBefore
             << "validCountAfter=" << validCountAfter;
-        emit collectionBlockRejected(
+        emit collectionBlockRejected(generation,
             blockIndex,
             expectedSequence,
             QStringLiteral("读取后校验失败：active=%1，sequence=%2，count=%3。")
                 .arg(activeBlockAfter)
                 .arg(sequenceAfter)
                 .arg(validCountAfter));
+        return;
+    }
+
+    int finalSession = 0;
+    if (!readInteger("DC_SESSION_ACK", &finalSession, &errorMessage)
+        || finalSession != session) {
+        emit collectionCommandFailed(generation,
+            QStringLiteral("数据块传输期间控制器会话改变：expected=%1，actual=%2。%3")
+                .arg(session).arg(finalSession).arg(errorMessage));
         return;
     }
 
@@ -820,7 +847,7 @@ void AcsClient::readCollectionBlock(int blockIndex, int expectedSequence)
         << "sampleCount=" << block.sampleCount
         << "partial=" << block.partial
         << "elapsedMs=" << readTimer.elapsed();
-    emit collectionBlockRead(block);
+    emit collectionBlockRead(generation, block);
 }
 
 void AcsClient::pollStatus()

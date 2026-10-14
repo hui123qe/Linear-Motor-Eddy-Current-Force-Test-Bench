@@ -14,6 +14,7 @@ namespace {
 
 constexpr int kMetadataPollIntervalMilliseconds = 50;
 constexpr qint64 kStoppingTimeoutMilliseconds = 5000;
+constexpr qint64 kStartingTimeoutMilliseconds = 5000;
 
 QString acquisitionStateText(AcquisitionState state)
 {
@@ -47,7 +48,7 @@ QString integerArrayText(
 QString metadataText(const AcsCollectionMetadata& metadata)
 {
     return QStringLiteral(
-               "control=%1 active=%2 finished=%3 published=%4 "
+               "sessionBefore=%10 sessionAfter=%11 control=%1 active=%2 finished=%3 published=%4 "
                "finishedCount=%5 finishedPartial=%6 validCounts=%7 "
                "partialFlags=%8 blockSequences=%9")
         .arg(metadata.controlEnabled)
@@ -58,7 +59,9 @@ QString metadataText(const AcsCollectionMetadata& metadata)
         .arg(metadata.finishedPartial ? 1 : 0)
         .arg(integerArrayText(metadata.validCounts))
         .arg(integerArrayText(metadata.partialFlags))
-        .arg(integerArrayText(metadata.blockSequences));
+        .arg(integerArrayText(metadata.blockSequences))
+        .arg(metadata.sessionBefore)
+        .arg(metadata.sessionAfter);
 }
 
 void setError(QString* errorMessage, const QString& message)
@@ -158,7 +161,7 @@ void DataAcquisitionService::shutdown()
         << acquisitionStateText(state_)
         << "connected=" << connected_
         << "lastConsumed=" << lastConsumedSequence_;
-    pollTimer_->stop();
+    invalidateRequests();
     if (connected_) {
         qCInfo(logAcquisition)
             << "[采集流程][服务关闭] 同步请求控制器关闭 DCSTART_CON";
@@ -205,7 +208,9 @@ bool DataAcquisitionService::startCollection(QString* errorMessage)
         return false;
     }
 
+    invalidateRequests();
     lastConsumedSequence_ = 0;
+    startingTimer_.start();
     qCInfo(logAcquisition)
         << "[采集流程][启动请求] 会话本地状态已重置，lastConsumed="
         << lastConsumedSequence_;
@@ -239,19 +244,26 @@ bool DataAcquisitionService::stopCollection(QString* errorMessage)
             << "[采集流程][停止请求] 当前已是 Idle，直接视为成功";
         return true;
     }
+    if (state_ == AcquisitionState::Fault) {
+        return true; // Fault cleanup already owns the stop command.
+    }
     if (state_ == AcquisitionState::Stopping) {
         qCInfo(logAcquisition)
             << "[采集流程][停止请求] 已在 Stopping，忽略重复请求";
         return true;
     }
 
-    setState(AcquisitionState::Stopping);
     stoppingTimer_.start();
-    pollTimer_->start();
-    qCInfo(logAcquisition)
-        << "[采集流程][停止请求] 已启动停止排空计时和元数据轮询，timeoutMs="
-        << kStoppingTimeoutMilliseconds;
-    requestCollectionControl(false);
+    setState(AcquisitionState::Stopping);
+    // Do not close the start pulse before the controller initializes its session.
+    if (!startCommandSent_) {
+        finishCollection();
+    } else if (sessionConfirmed_) {
+        stopCommandSent_ = true;
+        requestCollectionControl(false);
+    } else {
+        requestMetadata();
+    }
     return true;
 }
 
@@ -276,15 +288,25 @@ void DataAcquisitionService::requestMetadata()
         return;
     }
 
-    // 单次定时器只用于无新块时退避；发出请求前先取消未触发的超时，避免重复查询。
+    if (metadataInFlight_ || blockInFlight_ || controlInFlight_) {
+        qCDebug(logAcquisition) << "[采集流程][请求合并] generation=" << generation_
+                               << "metadata=" << metadataInFlight_
+                               << "block=" << blockInFlight_ << "control=" << controlInFlight_;
+        return;
+    }
+    // Requests remain in flight until the main thread handles their callbacks.
     qCDebug(logAcquisition)
         << "[采集流程][元数据请求] 入队，state="
         << acquisitionStateText(state_)
         << "lastConsumed=" << lastConsumedSequence_
         << "timerWasActive=" << pollTimer_->isActive();
     pollTimer_->stop();
+    metadataInFlight_ = true;
+    const quint64 generation = generation_;
     QMetaObject::invokeMethod(
-        client_, &AcsClient::readCollectionMetadata, Qt::QueuedConnection);
+        client_, [client = client_, generation] {
+            client->readCollectionMetadata(generation);
+        }, Qt::QueuedConnection);
 }
 
 void DataAcquisitionService::onConnectionChanged(bool connected,
@@ -310,84 +332,96 @@ void DataAcquisitionService::onConnectionChanged(bool connected,
     emit readinessChanged(isReady(), message);
 }
 
-void DataAcquisitionService::onCollectionControlWritten(bool enabled)
+void DataAcquisitionService::onCollectionControlWritten(quint64 generation, bool enabled)
 {
-    qCInfo(logAcquisition)
-        << "[采集流程][控制写入回执] enabled=" << enabled
-        << "state=" << acquisitionStateText(state_);
-    if (enabled && state_ == AcquisitionState::Starting) {
-        qCDebug(logAcquisition)
-            << "[采集流程][控制写入回执] 启动写入成功，立即复查元数据";
-        requestMetadata();
+    if (generation != generation_) {
         return;
     }
-
-    if (!enabled && state_ == AcquisitionState::Stopping) {
-        qCDebug(logAcquisition)
-            << "[采集流程][控制写入回执] 停止写入成功，立即检查尾块";
-        requestMetadata();
-        return;
-    }
-
-    qCDebug(logAcquisition)
-        << "[采集流程][控制写入回执] 当前状态无需后续动作";
+    controlInFlight_ = false;
+    qCInfo(logAcquisition) << "[采集流程][控制写入回执] generation=" << generation
+                          << "enabled=" << enabled << "state=" << acquisitionStateText(state_);
+    requestMetadata();
 }
 
 void DataAcquisitionService::onMetadataRead(
-    const AcsCollectionMetadata& metadata)
+    quint64 generation, const AcsCollectionMetadata& metadata)
 {
+    if (generation != generation_ || !metadataInFlight_) {
+        return;
+    }
+    metadataInFlight_ = false;
+    if (controlInFlight_) {
+        return; // The control acknowledgement will request a fresh snapshot.
+    }
     qCDebug(logAcquisition).noquote()
         << "[采集流程][元数据回调] state=" << acquisitionStateText(state_)
         << "lastConsumed=" << lastConsumedSequence_
         << metadataText(metadata);
 
-    if (metadata.publishedSequence == 0 && lastConsumedSequence_ != 0) {
-        qCInfo(logAcquisition)
-            << "[采集流程][序号重置] 下位发布序号已清零，"
-               "上位消费序号从头计算，oldLastConsumed="
-            << lastConsumedSequence_;
-        lastConsumedSequence_ = 0;
+    if (state_ != AcquisitionState::Starting && state_ != AcquisitionState::Collecting
+        && state_ != AcquisitionState::Stopping) {
+        return;
     }
-
-    if (state_ == AcquisitionState::Starting) {
-        if (metadata.controlEnabled == 1) {
-            qCInfo(logAcquisition)
-                << "[采集流程][启动判定] DCSTART_CON 已开启，"
-                   "即将发布 collectionStarted，baseline="
-                << lastConsumedSequence_;
-            setState(AcquisitionState::Collecting);
-            emit collectionStarted();
-            pollTimer_->start();
+    if (!sessionConfirmed_ && startingTimer_.elapsed() > kStartingTimeoutMilliseconds) {
+        failCollection(QStringLiteral("采集会话初始化超时，expectedSession=%1，ack=%2/%3。")
+                           .arg(controllerSession_).arg(metadata.sessionBefore).arg(metadata.sessionAfter));
+        return;
+    }
+    if (!startCommandSent_) {
+        if (metadata.controlEnabled != 0 || metadata.activeBlock != 0
+            || metadata.sessionBefore != metadata.sessionAfter) {
+            failCollection(QStringLiteral("采集启动前控制器未处于稳定空闲状态。"));
             return;
         }
-
-        if (metadata.controlEnabled != 0 || metadata.activeBlock != 0) {
-            qCWarning(logAcquisition).noquote()
-                << "[采集流程][启动判定] Buffer 非空闲，无法建立会话基线，"
-                << metadataText(metadata);
-            failCollection(
-                QStringLiteral("采集 Buffer 未处于空闲状态：DCSTART_CON=%1，"
-                               "DC_ACTIVE_BLOCK=%2。")
-                    .arg(metadata.controlEnabled)
-                    .arg(metadata.activeBlock));
+        // A new controller session starts from zero, not the old publication count.
+        controllerSession_ = metadata.sessionAfter == std::numeric_limits<int>::max()
+                                 ? 1 : metadata.sessionAfter + 1;
+        if (controllerSession_ <= 0) {
+            failCollection(QStringLiteral("控制器采集会话回执无效。"));
             return;
         }
-
-        // 启动新会话前以当前发布序号为起点，不消费上一会话留下的块。
-        lastConsumedSequence_ = metadata.publishedSequence;
-        qCInfo(logAcquisition)
-            << "[采集流程][启动判定] Buffer 空闲，会话基线已建立，baseline="
-            << lastConsumedSequence_
-            << "nextExpected=" << (lastConsumedSequence_ + 1);
+        startCommandSent_ = true;
         requestCollectionControl(true);
         return;
     }
-
-    if (state_ != AcquisitionState::Collecting
-        && state_ != AcquisitionState::Stopping) {
-        qCDebug(logAcquisition)
-            << "[采集流程][元数据回调] 当前状态不消费元数据，state="
-            << acquisitionStateText(state_);
+    if (!sessionConfirmed_) {
+        if (metadata.sessionBefore != controllerSession_
+            || metadata.sessionAfter != controllerSession_) {
+            pollTimer_->start();
+            return;
+        }
+        sessionConfirmed_ = true;
+        lastConsumedSequence_ = 0;
+        qCInfo(logAcquisition) << "[采集流程][会话确认] generation=" << generation_
+                              << "session=" << controllerSession_
+                              << "published=" << metadata.publishedSequence;
+        if (state_ == AcquisitionState::Stopping) {
+            stopCommandSent_ = true;
+            requestCollectionControl(false);
+            return;
+        }
+        if (metadata.controlEnabled != 1) {
+            failCollection(QStringLiteral("采集会话初始化后控制开关意外关闭。"));
+            return;
+        }
+        setState(AcquisitionState::Collecting);
+        if (generation != generation_ || state_ != AcquisitionState::Collecting) {
+            return;
+        }
+        emit collectionStarted();
+        if (generation != generation_ || state_ != AcquisitionState::Collecting) {
+            return;
+        }
+        // Accept a first snapshot that already contains block 1.
+    } else if (metadata.sessionBefore != controllerSession_
+               || metadata.sessionAfter != controllerSession_) {
+        failCollection(QStringLiteral("采集中控制器会话改变，expected=%1，ack=%2/%3。")
+                           .arg(controllerSession_).arg(metadata.sessionBefore).arg(metadata.sessionAfter));
+        return;
+    }
+    if (state_ == AcquisitionState::Stopping && !stopCommandSent_) {
+        stopCommandSent_ = true;
+        requestCollectionControl(false);
         return;
     }
 
@@ -439,9 +473,7 @@ void DataAcquisitionService::onMetadataRead(
             << "published=" << metadata.publishedSequence
             << "lastConsumed=" << lastConsumedSequence_
             << "elapsedMs=" << stoppingTimer_.elapsed();
-        pollTimer_->stop();
-        setState(AcquisitionState::Idle);
-        emit collectionStopped();
+        finishCollection();
         return;
     }
 
@@ -455,8 +487,11 @@ void DataAcquisitionService::onMetadataRead(
     pollTimer_->start();
 }
 
-void DataAcquisitionService::onBlockRead(const AcquisitionBlock& block)
+void DataAcquisitionService::onBlockRead(quint64 generation, const AcquisitionBlock& block)
 {
+    if (generation != generation_ || !blockInFlight_) {
+        return;
+    }
     qCInfo(logAcquisition)
         << "[采集流程][块读取回调] 收到稳定数据块，state="
         << acquisitionStateText(state_)
@@ -487,16 +522,27 @@ void DataAcquisitionService::onBlockRead(const AcquisitionBlock& block)
         << lastConsumedSequence_
         << "nextExpected=" << (lastConsumedSequence_ + 1);
     emit blockReady(block);
+    if (generation != generation_) {
+        return;
+    }
     publishForcePositionSamples(block);
+    if (generation != generation_) {
+        return;
+    }
+    blockInFlight_ = false;
     qCDebug(logAcquisition)
         << "[采集流程][块消费] 数据已发布，立即查询下一块";
     requestMetadata();
 }
 
-void DataAcquisitionService::onBlockRejected(int blockIndex,
+void DataAcquisitionService::onBlockRejected(quint64 generation, int blockIndex,
                                              int expectedSequence,
                                              const QString& message)
 {
+    if (generation != generation_ || !blockInFlight_) {
+        return;
+    }
+    blockInFlight_ = false;
     if (state_ == AcquisitionState::Collecting
         || state_ == AcquisitionState::Stopping) {
         // 拒收表示块在传输期间可能被重用，不推进消费序号，改为重新查询元数据。
@@ -518,8 +564,11 @@ void DataAcquisitionService::onBlockRejected(int blockIndex,
         << "expected=" << expectedSequence;
 }
 
-void DataAcquisitionService::onCollectionCommandFailed(const QString& message)
+void DataAcquisitionService::onCollectionCommandFailed(quint64 generation, const QString& message)
 {
+    if (generation != generation_) {
+        return;
+    }
     qCCritical(logAcquisition).noquote()
         << "[采集流程][ACS 命令失败] state=" << acquisitionStateText(state_)
         << "message=" << message;
@@ -530,6 +579,27 @@ void DataAcquisitionService::onCollectionCommandFailed(const QString& message)
 
     qCDebug(logAcquisition)
         << "[采集流程][ACS 命令失败] 已处于 Fault，不重复触发故障流程";
+}
+
+void DataAcquisitionService::invalidateRequests()
+{
+    ++generation_;
+    pollTimer_->stop();
+    metadataInFlight_ = false;
+    blockInFlight_ = false;
+    controlInFlight_ = false;
+    startCommandSent_ = false;
+    sessionConfirmed_ = false;
+    stopCommandSent_ = false;
+    startingTimer_.invalidate();
+}
+
+void DataAcquisitionService::finishCollection()
+{
+    invalidateRequests();
+    stoppingTimer_.invalidate();
+    setState(AcquisitionState::Idle);
+    emit collectionStopped();
 }
 
 void DataAcquisitionService::setState(AcquisitionState state)
@@ -557,7 +627,7 @@ void DataAcquisitionService::failCollection(const QString& message)
     const bool wasActive = state_ == AcquisitionState::Starting
                            || state_ == AcquisitionState::Collecting
                            || state_ == AcquisitionState::Stopping;
-    pollTimer_->stop();
+    invalidateRequests();
     setState(AcquisitionState::Fault);
     qCCritical(logAcquisition).noquote()
         << "[采集流程][故障] previousState="
@@ -586,16 +656,26 @@ void DataAcquisitionService::requestCollectionControl(bool enabled)
     qCInfo(logAcquisition)
         << "[采集流程][控制请求] 入队，enabled=" << enabled
         << "state=" << acquisitionStateText(state_);
+    controlInFlight_ = true;
+    const quint64 generation = generation_;
+    const int session = controllerSession_;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, enabled] {
-            client->setCollectionEnabled(enabled);
+        [client = client_, enabled, generation, session] {
+            client->setCollectionEnabled(enabled, generation, session);
         },
         Qt::QueuedConnection);
 }
 
 void DataAcquisitionService::requestBlock(int blockIndex, int expectedSequence)
 {
+    if (blockInFlight_ || metadataInFlight_ || controlInFlight_) {
+        requestMetadata();
+        return;
+    }
+    blockInFlight_ = true;
+    const quint64 generation = generation_;
+    const int session = controllerSession_;
     qCInfo(logAcquisition)
         << "[采集流程][块读取请求] 入队，block=" << blockIndex
         << "expected=" << expectedSequence
@@ -603,8 +683,8 @@ void DataAcquisitionService::requestBlock(int blockIndex, int expectedSequence)
         << "lastConsumed=" << lastConsumedSequence_;
     QMetaObject::invokeMethod(
         client_,
-        [client = client_, blockIndex, expectedSequence] {
-            client->readCollectionBlock(blockIndex, expectedSequence);
+        [client = client_, blockIndex, expectedSequence, generation, session] {
+            client->readCollectionBlock(blockIndex, expectedSequence, generation, session);
         },
         Qt::QueuedConnection);
 }

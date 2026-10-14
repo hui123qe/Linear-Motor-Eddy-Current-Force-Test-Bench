@@ -21,6 +21,8 @@ enum class AcquisitionState
 
 struct AcsCollectionMetadata
 {
+    int sessionBefore = 0;
+    int sessionAfter = 0;
     int controlEnabled = 0;
     int activeBlock = 0;
     int finishedBlock = 0;
