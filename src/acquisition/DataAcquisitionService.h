@@ -46,13 +46,32 @@ private slots:
     void onCollectionCommandFailed(quint64 generation, const QString& message);
 
 private:
+    enum class Phase {
+        Idle,
+        CheckingIdle,
+        Enabling,
+        AwaitingSession,
+        Collecting,
+        StoppingAwaitingSession,
+        Disabling,
+        Draining,
+        Fault
+    };
+
+    enum class PendingRead { None, Metadata, Block };
+    enum class PendingControl { None, Enable, Disable };
+
     DataAcquisitionService();
     ~DataAcquisitionService() override;
 
     DataAcquisitionService(const DataAcquisitionService&) = delete;
     DataAcquisitionService& operator=(const DataAcquisitionService&) = delete;
 
-    void setState(AcquisitionState state);
+    void setPhase(Phase phase);
+    [[nodiscard]] static const char* phaseName(Phase phase);
+    void checkIdleBeforeStart(const AcsCollectionMetadata& metadata);
+    void confirmSession(const AcsCollectionMetadata& metadata);
+    void consumePublishedBlocks(const AcsCollectionMetadata& metadata);
     void invalidateRequests();
     void finishCollection();
     void failCollection(const QString& message);
@@ -62,22 +81,19 @@ private:
                                        int* blockIndex,
                                        int* sequence,
                                        QString* errorMessage) const;
+
     void publishForcePositionSamples(const AcquisitionBlock& block);
 
     AcsClient* client_ = nullptr;
     QTimer* pollTimer_ = nullptr;
-    AcquisitionState state_ = AcquisitionState::Idle;
+    Phase phase_ = Phase::Idle;
     bool initialized_ = false;
     bool connected_ = false;
     int lastConsumedSequence_ = 0;
     quint64 generation_ = 0;
     int controllerSession_ = 0;
-    bool metadataInFlight_ = false;
-    bool blockInFlight_ = false;
-    bool controlInFlight_ = false;
-    bool startCommandSent_ = false;
-    bool sessionConfirmed_ = false;
-    bool stopCommandSent_ = false;
+    PendingRead pendingRead_ = PendingRead::None;
+    PendingControl pendingControl_ = PendingControl::None;
     QElapsedTimer startingTimer_;
     QElapsedTimer stoppingTimer_;
 };

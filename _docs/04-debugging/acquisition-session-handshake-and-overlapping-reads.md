@@ -193,8 +193,21 @@ code_refs:
 
 ### 7.2 在途保护与主机 generation
 
+后续将采集服务的多个布尔标记收束为内部 `Phase`。对外 `AcquisitionState` 仍保持原值，用于 UI 和流程层；内部阶段决定当前回调能推进哪一步：
+
+| 内部阶段 | 对外状态 | 下一步 |
+|---|---|---|
+| `CheckingIdle` | Starting | 查询旧会话是否空闲 |
+| `Enabling` → `AwaitingSession` | Starting | 写入开启命令，等待匹配的初始化 ACK |
+| `Collecting` | Collecting | 按连续序号读取新块 |
+| `StoppingAwaitingSession` | Stopping | 已提交开启请求，先等控制器完成本次初始化 |
+| `Disabling` → `Draining` | Stopping | 关闭采集，再读取尾块和确认排空 |
+| `Idle` / `Fault` | 同名状态 | 本次会话完成或故障 |
+
+另用 `PendingRead`（None/Metadata/Block）和 `PendingControl`（None/Enable/Disable）表示两条方向不同的异步请求通道。这两个枚举允许停止写入与已在途的块读取交错，但不会让元数据和块读取互相重叠。它们是传输进度，并非另一套业务生命周期状态。
+
 - 元数据/块请求从入队到主线程处理回调期间保持在途；存在读取或控制写入未完成时，新的查询触发被合并。
-- 块回调推进序号并执行 `blockReady` 后才释放块标记，避免同步槽中的事件重入提前发起下一条读取。
+- 块回调推进序号并执行 `blockReady` 后才释放 `PendingRead::Block`，避免同步槽中的事件重入提前发起下一条读取。
 - 关闭回执、块成功、块拒收都沿同一回调链继续查询；无新块时才使用单次定时器退避。
 - 停止入口取消原有“同时启动定时器并等待关闭回执”的双触发策略。
 - 所有采集控制、元数据、块成功/拒收和失败结果都携带主机 `generation`。开始、完成、故障、复位恢复和关闭时失效旧代；旧结果不会清除新代在途标记或改变新代序号。
@@ -232,8 +245,8 @@ C++ 保持现有 Qt 6.5.3 / MSVC x64 构建体系，无新增第三方库。ACS 
 - 已核对两份现场日志及源码调用顺序。
 - 已审查信号/槽和所有采集调用点，确保回调携带 generation。
 - 已检查差异空白错误。
-- 已执行 `cmake --build --preset vs2022-x64-debug --target EddyCurrentBench`：修改后的 C++ 与 Qt MOC 编译完成；最终链接报 LNK1168，无法写入现有 `build/vs2022-x64/Debug/高速涡流测试台.exe`。检查时存在同名运行进程，未关闭该进程，未生成可交付的新可执行文件。
-- 功能场景未执行，不将源码编译完成等同于链接成功或采集功能通过。
+- 初次执行 `cmake --build --preset vs2022-x64-debug --target EddyCurrentBench` 时，同名 EXE 被运行进程占用，最终链接报 LNK1168；没有关闭该进程。
+- 内部阶段重构后再次执行同一构建命令，C++、Qt MOC 与最终链接均通过。未运行程序或连接设备，因此编译通过不等于采集功能通过。
 
 ### 8.3 待执行的回归用例（本次未运行）
 
