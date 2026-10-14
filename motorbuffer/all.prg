@@ -1153,8 +1153,8 @@ GLOBAL REAL G_TEST_VEL=100
 GLOBAL INT G_REPEAT_COUNT =10
 
 ! 每段正向或反向实验结束后的结果处理等待时间。
-! 当前控制器程序周期按 40 ms 计算，125 个周期约为 5 秒。
-GLOBAL REAL G_RESULT_WAIT = 125
+! WAIT 2000 targets about 2 seconds for states 55 and 75.
+GLOBAL REAL G_RESULT_WAIT = 2000
 
 
 
