@@ -104,6 +104,7 @@ public slots:
                       double velocityMillimetersPerSecond);
     void startJog(double velocityMillimetersPerSecond);
     void haltAxis();
+    void moveToZero();
     void start(const MotionStartRequest& request);
     void stop();
     void setCollectionEnabled(bool enabled, quint64 generation = 0, int session = 0);
@@ -126,6 +127,7 @@ signals:
     void maintenanceCommandCompleted(MaintenanceCommand command);
     void maintenanceCommandFailed(MaintenanceCommand command,
                                   const QString& message);
+    void zeroPositionReached();
     void startRequestWritten();
     void stopRequestWritten();
     void commandFailed(const QString& message);
@@ -181,6 +183,7 @@ private:
     [[nodiscard]] QString sdkError(const QString& action) const;
     void handleCommunicationFailure(const QString& message);
 
+    bool zeroMovePending_ = false;
     void* controllerHandle_;
     QTimer* pollTimer_ = nullptr;
     QTimer* sensorPollTimer_ = nullptr;

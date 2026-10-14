@@ -52,6 +52,7 @@ public:
     [[nodiscard]] bool homeRunning() const;
     [[nodiscard]] bool hasActiveMotion() const;
     void requestProtectionStop(const ProtectionStopRequest& request);
+    [[nodiscard]] bool moveToZero(QString* errorMessage = nullptr);
     [[nodiscard]] bool start(const TestParameters& parameters,
                              QString* errorMessage = nullptr);
     [[nodiscard]] bool stop(QString* errorMessage = nullptr);
@@ -77,6 +78,7 @@ signals:
     void maintenanceCommandCompleted(MaintenanceCommand command);
     void maintenanceCommandFailed(MaintenanceCommand command,
                                   const QString& message);
+    void zeroPositionReached();
     void startRequestWritten();
     void stopRequestWritten();
     void commandFailed(const QString& message);
@@ -103,6 +105,7 @@ private:
     AcsMotionStatus currentStatus_;
     bool hasStatusSnapshot_ = false;
     MachineMode machineMode_ = MachineMode::Automatic;
+    bool zeroMovePending_ = false;
     bool maintenanceCommandPending_ = false;
     bool forceTarePending_ = false;
     bool connected_ = false;

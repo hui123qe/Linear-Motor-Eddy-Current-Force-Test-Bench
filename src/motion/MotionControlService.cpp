@@ -51,6 +51,7 @@ MotionControlService::MotionControlService()
                 connected_ = connected;
                 if (!connected) { protectionStopped_ = false; }
                 if (!connected) {
+                    zeroMovePending_ = false;
                     maintenanceCommandPending_ = false;
                     forceTarePending_ = false;
                     currentStatus_ = AcsMotionStatus{};
@@ -117,6 +118,7 @@ MotionControlService::MotionControlService()
             &AcsClient::controllerResetCompleted,
             this,
             [this] {
+                zeroMovePending_ = false;
                 maintenanceCommandPending_ = false;
                 protectionStopped_ = false;
                 emit controllerResetCompleted();
@@ -132,6 +134,7 @@ MotionControlService::MotionControlService()
             &AcsClient::emergencyStopCompleted,
             this,
             [this] {
+                zeroMovePending_ = false;
                 maintenanceCommandPending_ = false;
                 forceTarePending_ = false;
                 emit emergencyStopCompleted();
@@ -146,7 +149,11 @@ MotionControlService::MotionControlService()
         qCInfo(logMotion) << "故障停止反馈" << result.occurrenceId
                          << "state=" << static_cast<int>(result.state) << result.detail;
         protectionStopped_ = result.state == ProtectionStopState::Confirmed;
-        if (protectionStopped_) { maintenanceCommandPending_ = false; forceTarePending_ = false; }
+        if (protectionStopped_) {
+            zeroMovePending_ = false;
+            maintenanceCommandPending_ = false;
+            forceTarePending_ = false;
+        }
     });
     connect(client_,
             &AcsClient::forceTareStarted,
@@ -181,6 +188,12 @@ MotionControlService::MotionControlService()
                 }
                 emit maintenanceCommandFailed(command, message);
             });
+    connect(client_, &AcsClient::zeroPositionReached, this, [this] {
+        if (zeroMovePending_) {
+            zeroMovePending_ = false;
+            emit zeroPositionReached();
+        }
+    });
     connect(client_,
             &AcsClient::startRequestWritten,
             this,
@@ -721,7 +734,7 @@ bool MotionControlService::homeRunning() const
 
 bool MotionControlService::hasActiveMotion() const
 {
-    return currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
+    return zeroMovePending_ || currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
         || (!protectionStopped_ && (maintenanceCommandPending_ || currentStatus_.homeRunning || isActiveState(currentStatus_.state)));
 }
 
@@ -733,6 +746,38 @@ void MotionControlService::requestProtectionStop(const ProtectionStopRequest& re
             false, false, QStringLiteral("ACS 工作线程未启动")}); return;
     }
     QMetaObject::invokeMethod(client_, [client = client_, request] { client->stopConfiguredBufferAndKillAll(request); }, Qt::QueuedConnection);
+}
+
+bool MotionControlService::moveToZero(QString* errorMessage)
+{
+    if (!workerThread_.isRunning() || !connected_ || !hasStatusSnapshot_
+        || machineMode_ != MachineMode::Automatic || !homeDone()
+        || currentStatus_.state != 0
+        || hasActiveMotion()) {
+        setError(errorMessage, QStringLiteral("当前状态不允许测试前绝对移动到 0。"));
+        return false;
+    }
+    if (!MachineStateManager::instance().canSubmitCommand(
+            MachineState::Running, errorMessage)) {
+        return false;
+    }
+    const quint64 commandEpoch = MachineStateManager::instance().commandEpoch();
+    zeroMovePending_ = true;
+    qCInfo(logMotion) << "测试前绝对移动到 0 mm";
+    QMetaObject::invokeMethod(client_, [this, client = client_, commandEpoch] {
+        if (!MachineStateManager::instance().commandAllowed(
+                commandEpoch, MachineState::Running)) {
+            QMetaObject::invokeMethod(this, [this] {
+                if (zeroMovePending_) {
+                    zeroMovePending_ = false;
+                    emit commandFailed(QStringLiteral("测试前定位命令已因机器状态变化取消。"));
+                }
+            }, Qt::QueuedConnection);
+            return;
+        }
+        client->moveToZero();
+    }, Qt::QueuedConnection);
+    return true;
 }
 
 bool MotionControlService::start(const TestParameters& parameters,
@@ -847,6 +892,14 @@ bool MotionControlService::stop(QString* errorMessage)
     if (!connected_) {
         setError(errorMessage, QStringLiteral("ACS 控制器未连接。"));
         return false;
+    }
+    if (zeroMovePending_) {
+        zeroMovePending_ = false;
+        qCInfo(logMotion) << "停止测试前定位运动";
+        QMetaObject::invokeMethod(client_, [client = client_] {
+            client->stop();
+        }, Qt::QueuedConnection);
+        return true;
     }
     if (!isActiveState(currentStatus_.state)) {
         setError(

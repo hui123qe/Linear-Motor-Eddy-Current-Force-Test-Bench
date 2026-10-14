@@ -161,6 +161,15 @@ TestExecutionService::TestExecutionService()
             this,
             &TestExecutionService::handleCompletedRecordCountChanged);
     connect(&motionService,
+            &MotionControlService::zeroPositionReached,
+            this,
+            [this] {
+                if (hasActiveExecution() && !userStopRequested_
+                    && !pendingTerminalState_.has_value()) {
+                    prepareRepetition(1);
+                }
+            });
+    connect(&motionService,
             &MotionControlService::startRequestWritten,
             this,
             &TestExecutionService::handleMotionStartRequestWritten);
@@ -237,7 +246,7 @@ void TestExecutionService::shutdown()
         qCWarning(logAcquisition).noquote()
             << "退出时停止采集失败：" << ignoredError;
     }
-    if (isActiveMotionState(motionState_)) {
+    if (MotionControlService::instance().hasActiveMotion()) {
         ignoredError.clear();
         if (!MotionControlService::instance().stop(&ignoredError)) {
             qCWarning(logMotion).noquote()
@@ -293,8 +302,14 @@ bool TestExecutionService::start(const TestResultTargets& resultTargets,
     pendingTerminalState_.reset();
     terminalReason_.clear();
     emit executionStarted(executionId_, baseExperimentName_);
-    prepareRepetition(1);
-    return currentRepetitionIndex_ != 0;
+    currentRepetitionIndex_ = 1;
+    QString motionError;
+    if (!MotionControlService::instance().moveToZero(&motionError)) {
+        setError(errorMessage, motionError);
+        failExecution(motionError, true);
+        return false;
+    }
+    return true;
 }
 
 bool TestExecutionService::stop(QString* errorMessage)
@@ -316,7 +331,7 @@ bool TestExecutionService::stop(QString* errorMessage)
         DataAcquisitionService::instance().stopCollection(&acquisitionError);
     QString motionError;
     const bool motionAccepted =
-        !isActiveMotionState(motionState_)
+        !MotionControlService::instance().hasActiveMotion()
         || MotionControlService::instance().stop(&motionError);
     if (!acquisitionAccepted || !motionAccepted) {
         const QString failureMessage =
@@ -327,6 +342,7 @@ bool TestExecutionService::stop(QString* errorMessage)
     }
     MachineStateManager::instance().updateRunningReason(
         QStringLiteral("正在停止测试"));
+    tryFinishPendingTerminalState(true);
     return true;
 }
 bool TestExecutionService::reset(QString* errorMessage)
@@ -910,7 +926,7 @@ void TestExecutionService::failExecution(const QString& message,
                 << "流程故障后停止采集失败：" << ignoredError;
         }
     }
-    if (requestMotionStop && isActiveMotionState(motionState_)) {
+    if (requestMotionStop && MotionControlService::instance().hasActiveMotion()) {
         ignoredError.clear();
         if (!MotionControlService::instance().stop(&ignoredError)) {
             qCWarning(logMotion).noquote()

@@ -155,6 +155,7 @@ void AcsClient::disconnectController()
 
 void AcsClient::emergencyStop()
 {
+    zeroMovePending_ = false;
     if (controllerHandle_ == ACSC_INVALID) {
         const QString message =
             QStringLiteral("ACS 控制器未连接，不能执行软件急停。");
@@ -178,6 +179,7 @@ void AcsClient::emergencyStop()
 
 void AcsClient::stopConfiguredBufferAndKillAll(const ProtectionStopRequest& request)
 {
+    zeroMovePending_ = false;
     if (pendingProtectionStops_.contains(request.occurrenceId)) { return; }
     ProtectionStopResult result;
     result.occurrenceId = request.occurrenceId; result.buffer = request.buffer;
@@ -349,6 +351,7 @@ void AcsClient::homeAxis()
 
 void AcsClient::resetController()
 {
+    zeroMovePending_ = false;
     if (controllerHandle_ == ACSC_INVALID) {
         emit controllerResetFailed(
             QStringLiteral("ACS 控制器未连接，不能执行复位。"));
@@ -557,8 +560,44 @@ void AcsClient::start(const MotionStartRequest& request)
     emit startRequestWritten();
 }
 
+void AcsClient::moveToZero()
+{
+    qCInfo(logMotion) << "测试前绝对定位：acsc_ToPoint，axis=" << axis_ << "target=0";
+    if (controllerHandle_ == ACSC_INVALID) {
+        emit commandFailed(QStringLiteral("ACS 未连接，不能定位到 0。"));
+        return;
+    }
+    if (acsc_Enable(static_cast<HANDLE>(controllerHandle_), axis_,
+                    ACSC_SYNCHRONOUS) == 0) {
+        emit commandFailed(sdkError(QStringLiteral("测试前轴使能失败")));
+        return;
+    }
+    if (acsc_ToPoint(static_cast<HANDLE>(controllerHandle_), 0, axis_,
+                     0.0, ACSC_SYNCHRONOUS) == 0) {
+        emit commandFailed(sdkError(QStringLiteral("测试前定位到 0 失败")));
+        return;
+    }
+    zeroMovePending_ = true;
+    if (!acsc_WaitMotionEnd(static_cast<HANDLE>(controllerHandle_), axis_, 10000)) {
+        emit commandFailed(sdkError(QStringLiteral("等待测试前定位到 0 完成失败")));
+        return;
+    }
+    zeroMovePending_ = false;
+    emit zeroPositionReached();
+}
+
 void AcsClient::stop()
 {
+    if (zeroMovePending_) {
+        zeroMovePending_ = false;
+        if (acsc_Halt(static_cast<HANDLE>(controllerHandle_), axis_,
+                      ACSC_SYNCHRONOUS) == 0) {
+            emit commandFailed(sdkError(QStringLiteral("停止测试前定位失败")));
+            return;
+        }
+        emit stopRequestWritten();
+        return;
+    }
     if (controllerHandle_ == ACSC_INVALID) {
         const QString message =
             QStringLiteral("ACS 控制器未连接，不能发送停止请求。");
@@ -1157,6 +1196,7 @@ bool AcsClient::openConnection(QString* errorMessage)
 
 void AcsClient::closeConnection()
 {
+    zeroMovePending_ = false;
     protectionTimer_->stop();
     for (ProtectionStopResult result : pendingProtectionStops_) {
         result.state = ProtectionStopState::Failed; result.detail = QStringLiteral("ACS 连接关闭，停止核实未完成");
