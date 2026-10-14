@@ -1,0 +1,255 @@
+﻿2026-10-13 13:50:35.008 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:35.008 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.013 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 5 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 1 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 1 active= 2
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.015 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 2 published= 1
+2026-10-13 13:50:35.016 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 2 published= 1 active= 2 retryMs= 50
+2026-10-13 13:50:35.086 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:35.086 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.089 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 3 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 1 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 1 active= 2
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 2 published= 1
+2026-10-13 13:50:35.091 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 2 published= 1 active= 2 retryMs= 50
+2026-10-13 13:50:35.157 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:35.157 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.161 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.161 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 1 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 1 active= 2
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 2 published= 1
+2026-10-13 13:50:35.162 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 2 published= 1 active= 2 retryMs= 50
+2026-10-13 13:50:35.225 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:35.227 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.229 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.229 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 1 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 1 active= 2
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 2 published= 1
+2026-10-13 13:50:35.230 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 2 published= 1 active= 2 retryMs= 50
+2026-10-13 13:50:35.304 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:35.307 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.309 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 1 control=1 active=2 finished=1 published=1 finishedCount=16666 finishedPartial=0 validCounts=[16666,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 1 active= 2
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 2 published= 1
+2026-10-13 13:50:35.310 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 2 published= 1 active= 2 retryMs= 50
+2026-10-13 13:50:35.362 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 55 errorCode= 0
+2026-10-13 13:50:35.362 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 50 state= 55 errorCode= 0
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:411] [流程层][采集边界] 进入记录处理状态 executionId= 1791870609510 repetition= 1 state= 55 acquisitionState= 2 table= "hit_hsm_02_hit_ec_017_20261013_135009_512_c001_forward"
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:219] [采集流程][停止请求] 收到，state= "Collecting" initialized= true connected= true lastConsumed= 1
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Collecting" -> "Stopping" lastConsumed= 1
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:251] [采集流程][停止请求] 已启动停止排空计时和元数据轮询，timeoutMs= 5000
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:586] [采集流程][控制请求] 入队，enabled= false state= "Stopping"
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:91] ACS 完成记录计数变化：previous= 0 completedCount= 1
+2026-10-13 13:50:35.364 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:498] [采集流程][ACS 控制写入] 开始，DCSTART_CON= 0
+2026-10-13 13:50:35.364 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:444] [流程层][记录推进] 接受本次测试完成计数 executionId= 1791870609510 repetition= 1 completedCount= 1 tableOpen= true
+2026-10-13 13:50:35.364 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:518] [采集流程][ACS 控制写入] 成功并发送回执，DCSTART_CON= 0
+2026-10-13 13:50:35.369 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:315] [采集流程][控制写入回执] enabled= false state= "Stopping"
+2026-10-13 13:50:35.369 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:326] [采集流程][控制写入回执] 停止写入成功，立即检查尾块
+2026-10-13 13:50:35.369 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Stopping" lastConsumed= 1 timerWasActive= true
+2026-10-13 13:50:35.369 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.373 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 3 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:35.374 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Stopping lastConsumed= 1 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:35.374 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 1 expected= 2 published= 2 active= 0
+2026-10-13 13:50:35.375 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.375 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 2 isActive= false isExpected= true isPublishedUnconsumed= true
+2026-10-13 13:50:35.375 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:654] [采集流程][块选择] 精确命中，block= 2 sequence= 2
+2026-10-13 13:50:35.375 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:415] [采集流程][块选择] 找到下一个逻辑块，block= 2 sequence= 2 active= 0 published= 2
+2026-10-13 13:50:35.375 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:599] [采集流程][块读取请求] 入队，block= 2 expected= 2 state= "Stopping" lastConsumed= 1
+2026-10-13 13:50:35.375 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:588] [采集流程][ACS 块读取] 开始，block= 2 expected= 2
+2026-10-13 13:50:35.375 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:615] [采集流程][ACS 块读取] 开始读取前快照，block= 2 metadataIndex= 1
+2026-10-13 13:50:35.376 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:654] [采集流程][ACS 块读取] 读取前快照完成，block= 2 expected= 2 activeBefore= 0 sequenceBefore= 2 validCountBefore= 9129 partialBefore= 1 elapsedMs= 1
+2026-10-13 13:50:35.376 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:690] [采集流程][ACS 块读取] 开始矩阵传输，block= 2 sequence= 2 variable= DC_Data_2 channels= 6 samplesPerChannel= 9129 totalValues= 54774
+2026-10-13 13:50:35.500 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:714] [采集流程][ACS 块读取] 矩阵传输完成，block= 2 sequence= 2 totalValues= 54774 elapsedMs= 125
+2026-10-13 13:50:35.500 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:721] [采集流程][ACS 块读取] 开始读取后快照，block= 2 sequenceBefore= 2
+2026-10-13 13:50:35.501 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:751] [采集流程][ACS 块读取] 读取后快照完成，block= 2 expected= 2 activeAfter= 0 sequenceAfter= 2 validCountAfter= 9129 elapsedMs= 126
+2026-10-13 13:50:35.501 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:795] [采集流程][ACS 块读取] 开始矩阵通道拆分和单位换算，block= 2 sequence= 2 sampleCount= 9129
+2026-10-13 13:50:35.504 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:816] [采集流程][ACS 块读取] 校验与转换完成，发送数据块回调，block= 2 sequence= 2 sampleCount= 9129 partial= true elapsedMs= 129
+2026-10-13 13:50:35.504 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:460] [采集流程][块读取回调] 收到稳定数据块，state= "Stopping" block= 2 sequence= 2 sampleCount= 9129 partial= true lastConsumed= 1
+2026-10-13 13:50:35.504 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:485] [采集流程][块消费] 序号已推进，lastConsumed= 2 nextExpected= 3
+2026-10-13 13:50:35.504 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:693] [采集流程][位移力数据发布] 开始，block= 2 sequence= 2 points= 9129
+2026-10-13 13:50:35.506 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:704] [采集流程][位移力数据发布] 完成，sequence= 2 points= 9129
+2026-10-13 13:50:35.506 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:491] [采集流程][块消费] 数据已发布，立即查询下一块
+2026-10-13 13:50:35.508 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Stopping" lastConsumed= 2 timerWasActive= false
+2026-10-13 13:50:35.511 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:35.514 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 3 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:35.516 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 70 errorCode= 0
+2026-10-13 13:50:35.517 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 55 state= 70 errorCode= 0
+2026-10-13 13:50:35.517 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Stopping lastConsumed= 2 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:35.517 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 2 expected= 3 published= 2 active= 0
+2026-10-13 13:50:35.517 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.517 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 2 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.517 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.519 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.519 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:35.519 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 3 published= 2
+2026-10-13 13:50:35.519 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:435] [采集流程][停止排空] 已完成，control= 0 active= 0 published= 2 lastConsumed= 2 elapsedMs= 154
+2026-10-13 13:50:35.519 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Stopping" -> "Idle" lastConsumed= 2
+2026-10-13 13:50:37.568 [INFO] [thread 0x66a4] [完成回执] [TestExecutionService.cpp:628] [流程层][单次完成信号] 发送 experimentFinalized executionId= 1791870609510 repetition= 1 plannedRepeatCount= 5 state= 0 rawSampleCount= 25795 table= "hit_hsm_02_hit_ec_017_20261013_135009_512_c001_forward" finalizedRecordCount= 1
+2026-10-13 13:50:37.568 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:91] [实验日志层][单次完成信号] 接收 experimentFinalized executionId= 1791870609510 repetition= 1 plannedRepeatCount= 5 state= 0 rawSampleCount= 25795 table= "hit_hsm_02_hit_ec_017_20261013_135009_512_c001_forward"
+2026-10-13 13:50:37.568 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:144] [实验日志层][单次统计] 请求数据库计算有效区间统计 executionId= 1791870609510 repetition= 1 statisticsStartMeters= 0.4 statisticsEndMeters= 1.5 table= "hit_hsm_02_hit_ec_017_20261013_135009_512_c001_forward"
+2026-10-13 13:50:37.569 [INFO] [thread 0x7f88] [完成回执] [AcquisitionDatabaseService.cpp:594] [数据库线程][单次统计] 开始查询 executionId= 1791870609510 repetition= 1 table= "hit_hsm_02_hit_ec_017_20261013_135009_512_c001_forward" statisticsStartMeters= 0.4 statisticsEndMeters= 1.5
+2026-10-13 13:50:37.572 [INFO] [thread 0x7f88] [完成回执] [AcquisitionDatabaseService.cpp:662] [数据库线程][单次统计] 查询完成，发送 forceAggregateRead executionId= 1791870609510 repetition= 1 effectiveSampleCount= 13293
+2026-10-13 13:50:38.596 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:214] [实验日志层][单次统计回执] 收到数据库统计结果 executionId= 1791870609510 repetition= 1 effectiveSampleCount= 13293 hasAverageForce= true hasMinimumForce= true hasMaximumForce= true
+2026-10-13 13:50:38.596 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:374] [实验日志层][单次入库请求] 请求保存实验记录 executionId= 1791870609510 repetition= 1 effectiveSampleCount= 13293
+2026-10-13 13:50:38.596 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:183] [采集流程][启动请求] 收到，state= "Idle" initialized= true connected= true
+2026-10-13 13:50:38.596 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:209] [采集流程][启动请求] 会话本地状态已重置，lastConsumed= 0
+2026-10-13 13:50:38.596 [INFO] [thread 0x7f88] [完成回执] [AcquisitionDatabaseService.cpp:672] [数据库线程][单次入库] 开始保存 executionId= 1791870609510 repetition= 1 rawSampleCount= 25795 effectiveSampleCount= 13293
+2026-10-13 13:50:38.596 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Idle" -> "Starting" lastConsumed= 0
+2026-10-13 13:50:38.596 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Starting" lastConsumed= 0 timerWasActive= false
+2026-10-13 13:50:38.598 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:38.599 [INFO] [thread 0x7f88] [完成回执] [AcquisitionDatabaseService.cpp:765] [数据库线程][单次入库] 插入完成，发送 recordStored executionId= 1791870609510 repetition= 1 recordId= 106
+2026-10-13 13:50:38.601 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 3 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:282] [实验日志层][单次入库回执] 收到 experimentRecordStored executionId= 1791870609510 repetition= 1 recordId= 106
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:298] [实验日志层][单次 UI 信号] 发送 experimentRecordSaved executionId= 1791870609510 repetition= 1 recordId= 106
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [完成回执] [WorkbenchPage.cpp:933] [工作台][单次 UI 信号] 收到 experimentRecordSaved executionId= 1791870609510 activeExecutionId= 1791870609510 repetition= 1 recordId= 106
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [完成回执] [WorkbenchPage.cpp:961] [工作台][单次 UI 更新] 已更新每次循环结果卡片 executionId= 1791870609510 repetition= 1 recordId= 106
+2026-10-13 13:50:38.645 [DEBUG] [thread 0x66a4] [完成回执] [ExperimentLogService.cpp:406] [实验日志层][整组汇总判定] 尚不具备汇总条件 executionId= 1791870609510 groupExists= true finalContextReceived= false storeRequested= false
+2026-10-13 13:50:38.645 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Starting lastConsumed= 0 control=0 active=0 finished=2 published=2 finishedCount=9129 finishedPartial=1 validCounts=[16666,9129,0,0,0] partialFlags=[0,1,0,0,0] blockSequences=[1,2,0,0,0]
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:378] [采集流程][启动判定] Buffer 空闲，会话基线已建立，baseline= 2 nextExpected= 3
+2026-10-13 13:50:38.645 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:586] [采集流程][控制请求] 入队，enabled= true state= "Starting"
+2026-10-13 13:50:38.646 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:498] [采集流程][ACS 控制写入] 开始，DCSTART_CON= 1
+2026-10-13 13:50:38.646 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:518] [采集流程][ACS 控制写入] 成功并发送回执，DCSTART_CON= 1
+2026-10-13 13:50:38.670 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:315] [采集流程][控制写入回执] enabled= true state= "Starting"
+2026-10-13 13:50:38.672 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:319] [采集流程][控制写入回执] 启动写入成功，立即复查元数据
+2026-10-13 13:50:38.672 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Starting" lastConsumed= 2 timerWasActive= false
+2026-10-13 13:50:38.672 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:38.675 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:38.687 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Starting lastConsumed= 2 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:38.687 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:345] [采集流程][序号重置] 下位发布序号已清零，上位消费序号从头计算，oldLastConsumed= 2
+2026-10-13 13:50:38.687 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:354] [采集流程][启动判定] DCSTART_CON 已开启，即将发布 collectionStarted，baseline= 0
+2026-10-13 13:50:38.687 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Starting" -> "Collecting" lastConsumed= 0
+2026-10-13 13:50:38.747 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 0 timerWasActive= false
+2026-10-13 13:50:38.747 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:38.750 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:38.750 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 0 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:38.750 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 0 expected= 1 published= 0 active= 1
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 1 published= 0
+2026-10-13 13:50:38.751 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 1 published= 0 active= 1 retryMs= 50
+2026-10-13 13:50:39.758 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 0 timerWasActive= false
+2026-10-13 13:50:39.759 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:39.763 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Collecting lastConsumed= 0 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 0 expected= 1 published= 0 active= 1
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 1 published= 0
+2026-10-13 13:50:40.803 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Collecting" expected= 1 published= 0 active= 1 retryMs= 50
+2026-10-13 13:50:42.821 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Collecting" lastConsumed= 0 timerWasActive= false
+2026-10-13 13:50:42.821 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:42.825 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 75 errorCode= 0
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 70 state= 75 errorCode= 0
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:411] [流程层][采集边界] 进入记录处理状态 executionId= 1791870609510 repetition= 2 state= 75 acquisitionState= 2 table= "hit_hsm_02_hit_ec_017_20261013_135037_574_c001_reverse"
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:219] [采集流程][停止请求] 收到，state= "Collecting" initialized= true connected= true lastConsumed= 0
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Collecting" -> "Stopping" lastConsumed= 0
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:251] [采集流程][停止请求] 已启动停止排空计时和元数据轮询，timeoutMs= 5000
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:586] [采集流程][控制请求] 入队，enabled= false state= "Stopping"
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:91] ACS 完成记录计数变化：previous= 1 completedCount= 2
+2026-10-13 13:50:42.832 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:444] [流程层][记录推进] 接受本次测试完成计数 executionId= 1791870609510 repetition= 2 completedCount= 2 tableOpen= true
+2026-10-13 13:50:42.834 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 50 errorCode= 0
+2026-10-13 13:50:42.834 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:498] [采集流程][ACS 控制写入] 开始，DCSTART_CON= 0
+2026-10-13 13:50:42.834 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 75 state= 50 errorCode= 0
+2026-10-13 13:50:42.834 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:518] [采集流程][ACS 控制写入] 成功并发送回执，DCSTART_CON= 0
+2026-10-13 13:50:43.892 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Stopping" lastConsumed= 0 timerWasActive= false
+2026-10-13 13:50:43.892 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:43.897 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 4 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Stopping lastConsumed= 0 control=1 active=1 finished=0 published=0 finishedCount=0 finishedPartial=0 validCounts=[0,0,0,0,0] partialFlags=[0,0,0,0,0] blockSequences=[0,0,0,0,0]
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 0 expected= 1 published= 0 active= 1
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 0 isActive= true isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 2 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 3 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 4 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 5 candidate= 0 isActive= false isExpected= false isPublishedUnconsumed= false
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:682] [采集流程][块选择] 尚无新的已发布块，expected= 1 published= 0
+2026-10-13 13:50:44.879 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:448] [采集流程][等待新块] 当前无可读块，state= "Stopping" expected= 1 published= 0 active= 1 retryMs= 50
+2026-10-13 13:50:44.880 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:315] [采集流程][控制写入回执] enabled= false state= "Stopping"
+2026-10-13 13:50:44.880 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:326] [采集流程][控制写入回执] 停止写入成功，立即检查尾块
+2026-10-13 13:50:44.880 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Stopping" lastConsumed= 0 timerWasActive= true
+2026-10-13 13:50:44.882 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:44.884 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 2 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:44.918 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Stopping lastConsumed= 0 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:44.918 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 0 expected= 1 published= 1 active= 0
+2026-10-13 13:50:44.918 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= true isPublishedUnconsumed= true
+2026-10-13 13:50:44.918 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:654] [采集流程][块选择] 精确命中，block= 1 sequence= 1
+2026-10-13 13:50:44.918 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:415] [采集流程][块选择] 找到下一个逻辑块，block= 1 sequence= 1 active= 0 published= 1
+2026-10-13 13:50:44.918 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:599] [采集流程][块读取请求] 入队，block= 1 expected= 1 state= "Stopping" lastConsumed= 0
+2026-10-13 13:50:44.920 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:588] [采集流程][ACS 块读取] 开始，block= 1 expected= 1
+2026-10-13 13:50:44.920 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:615] [采集流程][ACS 块读取] 开始读取前快照，block= 1 metadataIndex= 0
+2026-10-13 13:50:44.921 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:654] [采集流程][ACS 块读取] 读取前快照完成，block= 1 expected= 1 activeBefore= 0 sequenceBefore= 1 validCountBefore= 4181 partialBefore= 1 elapsedMs= 2
+2026-10-13 13:50:44.921 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:690] [采集流程][ACS 块读取] 开始矩阵传输，block= 1 sequence= 1 variable= DC_Data_1 channels= 6 samplesPerChannel= 4181 totalValues= 25086
+2026-10-13 13:50:44.991 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:714] [采集流程][ACS 块读取] 矩阵传输完成，block= 1 sequence= 1 totalValues= 25086 elapsedMs= 72
+2026-10-13 13:50:44.993 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:721] [采集流程][ACS 块读取] 开始读取后快照，block= 1 sequenceBefore= 1
+2026-10-13 13:50:44.993 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:751] [采集流程][ACS 块读取] 读取后快照完成，block= 1 expected= 1 activeAfter= 0 sequenceAfter= 1 validCountAfter= 4181 elapsedMs= 73
+2026-10-13 13:50:44.993 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:795] [采集流程][ACS 块读取] 开始矩阵通道拆分和单位换算，block= 1 sequence= 1 sampleCount= 4181
+2026-10-13 13:50:44.994 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:816] [采集流程][ACS 块读取] 校验与转换完成，发送数据块回调，block= 1 sequence= 1 sampleCount= 4181 partial= true elapsedMs= 75
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Stopping lastConsumed= 0 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:618] [采集流程][块选择] 开始，lastConsumed= 0 expected= 1 published= 1 active= 0
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:643] [采集流程][块选择] 检查物理块，block= 1 candidate= 1 isActive= false isExpected= true isPublishedUnconsumed= true
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:654] [采集流程][块选择] 精确命中，block= 1 sequence= 1
+2026-10-13 13:50:46.932 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:415] [采集流程][块选择] 找到下一个逻辑块，block= 1 sequence= 1 active= 0 published= 1
+2026-10-13 13:50:46.932 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:599] [采集流程][块读取请求] 入队，block= 1 expected= 1 state= "Stopping" lastConsumed= 0
+2026-10-13 13:50:46.932 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:588] [采集流程][ACS 块读取] 开始，block= 1 expected= 1
+2026-10-13 13:50:46.932 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:460] [采集流程][块读取回调] 收到稳定数据块，state= "Stopping" block= 1 sequence= 1 sampleCount= 4181 partial= true lastConsumed= 0
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:615] [采集流程][ACS 块读取] 开始读取前快照，block= 1 metadataIndex= 0
+2026-10-13 13:50:46.932 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:485] [采集流程][块消费] 序号已推进，lastConsumed= 1 nextExpected= 2
+2026-10-13 13:50:46.932 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:693] [采集流程][位移力数据发布] 开始，block= 1 sequence= 1 points= 4181
+2026-10-13 13:50:46.934 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:704] [采集流程][位移力数据发布] 完成，sequence= 1 points= 4181
+2026-10-13 13:50:46.934 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:654] [采集流程][ACS 块读取] 读取前快照完成，block= 1 expected= 1 activeBefore= 0 sequenceBefore= 1 validCountBefore= 4181 partialBefore= 1 elapsedMs= 1
+2026-10-13 13:50:46.934 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:690] [采集流程][ACS 块读取] 开始矩阵传输，block= 1 sequence= 1 variable= DC_Data_1 channels= 6 samplesPerChannel= 4181 totalValues= 25086
+2026-10-13 13:50:46.934 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:491] [采集流程][块消费] 数据已发布，立即查询下一块
+2026-10-13 13:50:46.934 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:280] [采集流程][元数据请求] 入队，state= "Stopping" lastConsumed= 1 timerWasActive= false
+2026-10-13 13:50:46.997 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 55 errorCode= 0
+2026-10-13 13:50:46.997 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 50 state= 55 errorCode= 0
+2026-10-13 13:50:46.997 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:411] [流程层][采集边界] 进入记录处理状态 executionId= 1791870609510 repetition= 2 state= 55 acquisitionState= 3 table= "hit_hsm_02_hit_ec_017_20261013_135037_574_c001_reverse"
+2026-10-13 13:50:46.997 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:91] ACS 完成记录计数变化：previous= 2 completedCount= 3
+2026-10-13 13:50:46.997 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:444] [流程层][记录推进] 接受本次测试完成计数 executionId= 1791870609510 repetition= 2 completedCount= 3 tableOpen= true
+2026-10-13 13:50:47.005 [INFO] [thread 0x66a4] [eddy.motion] [MotionControlService.cpp:81] ACS 状态变化：state= 70 errorCode= 0
+2026-10-13 13:50:47.005 [INFO] [thread 0x66a4] [eddy.motion] [TestExecutionService.cpp:379] [流程层][运动状态] 状态变化 executionId= 1791870609510 previousState= 55 state= 70 errorCode= 0
+2026-10-13 13:50:47.007 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:714] [采集流程][ACS 块读取] 矩阵传输完成，block= 1 sequence= 1 totalValues= 25086 elapsedMs= 73
+2026-10-13 13:50:47.007 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:721] [采集流程][ACS 块读取] 开始读取后快照，block= 1 sequenceBefore= 1
+2026-10-13 13:50:47.008 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:751] [采集流程][ACS 块读取] 读取后快照完成，block= 1 expected= 1 activeAfter= 0 sequenceAfter= 1 validCountAfter= 4181 elapsedMs= 74
+2026-10-13 13:50:47.008 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:795] [采集流程][ACS 块读取] 开始矩阵通道拆分和单位换算，block= 1 sequence= 1 sampleCount= 4181
+2026-10-13 13:50:47.008 [INFO] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:816] [采集流程][ACS 块读取] 校验与转换完成，发送数据块回调，block= 1 sequence= 1 sampleCount= 4181 partial= true elapsedMs= 75
+2026-10-13 13:50:47.014 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:528] [采集流程][ACS 元数据读取] 开始：依次读取 6 个标量和 3 个块数组
+2026-10-13 13:50:47.019 [DEBUG] [thread 0x764c] [eddy.acquisition] [AcsClient.cpp:577] [采集流程][ACS 元数据读取] 完成并发送回调，elapsedMs= 4 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:49.001 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:460] [采集流程][块读取回调] 收到稳定数据块，state= "Stopping" block= 1 sequence= 1 sampleCount= 4181 partial= true lastConsumed= 1
+2026-10-13 13:50:49.001 [INFO] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:546] [采集流程][状态迁移] "Stopping" -> "Fault" lastConsumed= 1
+2026-10-13 13:50:49.001 [ERROR] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:562] [采集流程][故障] previousState= Stopping wasActive= true connected= true lastConsumed= 1 message= 采集块序号不连续：期望 2，收到 1。
+2026-10-13 13:50:49.001 [ERROR] [thread 0x66a4] [eddy.application] [TestExecutionService.cpp:768] 测试流程失败： 采集块序号不连续：期望 2，收到 1。
+2026-10-13 13:50:49.001 [INFO] [thread 0x66a4] [eddy.application] [TestExecutionService.cpp:863] 机器状态迁移： 错误 - 采集块序号不连续：期望 2，收到 1。
+2026-10-13 13:50:50.032 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:339] [采集流程][元数据回调] state= Fault lastConsumed= 1 control=0 active=0 finished=1 published=1 finishedCount=4181 finishedPartial=1 validCounts=[4181,0,0,0,0] partialFlags=[1,0,0,0,0] blockSequences=[1,0,0,0,0]
+2026-10-13 13:50:50.032 [DEBUG] [thread 0x66a4] [eddy.acquisition] [DataAcquisitionService.cpp:388] [采集流程][元数据回调] 当前状态不消费元数据，state= "Fault"
