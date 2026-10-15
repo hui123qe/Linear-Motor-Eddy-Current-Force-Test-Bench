@@ -1,5 +1,5 @@
 #/ Controller version = 4.20.01
-#/ Date = 10/14/2026 5:31 PM
+#/ Date = 10/15/2026 4:44 PM
 #/ User remarks = 
 #1
 !PNAME=IO Mapping
@@ -15,6 +15,7 @@ ECOUT(208,EC_DOUT3)
 
 ECIN(210,EC_AIN9)
 
+ECOUT/b(1665, EL3356_NoCal)        ! 初始化Buffer：只映射一次
 
 
 while 1
@@ -143,6 +144,8 @@ REAL L_MAX_POS
 INT L_LOOP_INDEX
 INT L_RECORD_INDEX
 
+REAL Correction_Factor
+
 
 !======================================================================
 ! 六、程序初始化
@@ -225,8 +228,9 @@ L_POSITION_ACC = ABS(G_N_ACC)
 L_POSITION_DEC = ABS(G_N_DEC)
 L_POSITION_JERK = ABS(G_N_JERK)
 
-L_TEST_ACC = ABS(G_TEST_ACC)
-L_TEST_DEC = ABS(G_TEST_DEC)
+Correction_Factor =1.3
+L_TEST_ACC = ABS(G_TEST_ACC)*Correction_Factor
+L_TEST_DEC = ABS(G_TEST_DEC)*Correction_Factor
 L_TEST_JERK = ABS(G_TEST_JERK)
 L_RESULT_WAIT = G_RESULT_WAIT
 
@@ -241,6 +245,11 @@ L_RESULT_WAIT = G_RESULT_WAIT
 IF L_ZERO_POS > L_MAX_POS
     G_ERROR_CODE = 1010
     GOTO PARAM_ERROR
+END
+
+IF  L_TEST_ACC >  25000
+	L_TEST_ACC = 25000
+	L_TEST_DEC = 25000
 END
 
 IF L_RESULT_WAIT <= 0
@@ -300,6 +309,9 @@ VEL(1)=Mass_Factor*VEL(X)
 JERK(1)=Mass_Factor*JERK(X)
 
 
+
+
+
 ! 绝对位置运动到零点。
 !
 ! PTP：
@@ -318,6 +330,9 @@ TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
 ! 启动 Buffer 去皮
 START 8, 1
 TILL (PST(8).#RUN = 0)
+
+EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
+
 
 
 ! 如果运动过程中 Buffer 11 收到了停止请求，
@@ -550,6 +565,7 @@ WAIT 100
 
 ! 回到等待启动状态。
 G_STATE = 0
+EL3356_NoCal = 0                   ! 测试结束：恢复自动校准
 
 GOTO WAIT_START
 
@@ -1261,6 +1277,18 @@ i++
 END
 
 STOP
+#10
+!PNAME=
+!PDESC=
+ELRO = COEREAD/f(6, 0X8000, 0X23)
+ELNLOAD = COEREAD/f(6, 0X8000, 0X24)
+ELZB = COEREAD/f(6, 0X8000, 0X25)
+STOP
+
+!COEWRITE/f(6, 0X8000, 0X23,ELRO)
+!COEWRITE/f(6, 0X8000, 0X24,ELNLOAD)
+!COEWRITE/f(6, 0X8000, 0X25,ELZB)
+!STOP
 #A
 !PNAME=
 !PDESC=
@@ -1272,6 +1300,7 @@ global real Up1_FLowA,Up2_FLowA,Side1_FLowA,Side2_FLowA,Down_FLowA,NC_AIN1,NC_AI
 global int Tara!去皮
 global real Froce_Sensor!力传感器读值
 
+GLOBAL INT EL3356_NoCal            ! D-buffer：声明全局变量
 
 
 !======================================================================
@@ -1355,7 +1384,7 @@ GLOBAL REAL G_TEST_ACC = 1000
 GLOBAL REAL G_TEST_DEC = 1000
 
 ! 测试运动 Jerk
-GLOBAL REAL G_TEST_JERK =10000
+GLOBAL REAL G_TEST_JERK = 600000
 
 
 
@@ -1512,3 +1541,5 @@ global REAL RPosition_Gantry=1700     !龙门轴的运动位置
 GLOBAL REAL Home_Offset=0       !龙门轴的回零偏移量
 GLOBAL REAL Mass_Factor=0.15         !平衡质量因数
 GLOBAl INT Cycle_No=1                !循环次数
+
+GLOBAL REAL ELRO, ELNLOAD, ELZB
