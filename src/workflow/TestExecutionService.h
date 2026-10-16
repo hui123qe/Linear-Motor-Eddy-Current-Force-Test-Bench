@@ -40,6 +40,14 @@ signals:
     void experimentGroupFinalized(const ExperimentGroupFinalContext& context);
 
 private:
+    enum class ExperimentTableState {
+        None,
+        Creating,
+        Open,
+        Finishing,
+        Failed
+    };
+
     TestExecutionService();
     ~TestExecutionService() override;
 
@@ -69,7 +77,11 @@ private:
                                    const QString& reason);
     void finalizeExecutionGroup(ExperimentTerminalState state,
                                 const QString& reason);
-    void tryFinishPendingTerminalState(bool databaseUsable);
+    void requestExperimentTableFinish();
+    [[nodiscard]] bool requestExecutionStop(bool requestMotionStop,
+                                            QString* errorMessage = nullptr);
+    void recordExecutionFailure(const QString& message);
+    void tryFinishPendingTerminalState();
     void finishPendingTerminalState();
     void resetExecutionContext();
     void failExecution(const QString& message,
@@ -89,7 +101,9 @@ private:
     int completedRecordCount_ = 0;
     int finalizedRecordCount_ = 0;
     qint64 currentRawSampleCount_ = 0;
-    bool tableOpen_ = false;
+    ExperimentTableState tableState_ = ExperimentTableState::None;
+    bool terminalStopRequestsInProgress_ = false;
+    bool finalizingExecution_ = false;
     bool currentRecordDataFinished_ = false;
     bool collectionStarted_ = false;
     bool motionStartRequested_ = false;

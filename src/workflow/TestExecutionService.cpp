@@ -11,6 +11,8 @@
 #include "../temperature/TemperatureDeviceService.h"
 
 #include <QDateTime>
+#include <QMetaObject>
+#include <QScopedValueRollback>
 
 #include <algorithm>
 
@@ -254,7 +256,7 @@ void TestExecutionService::shutdown()
         }
     }
     currentRepetitionIndex_ = 0;
-    tableOpen_ = false;
+    tableState_ = ExperimentTableState::None;
     resetExecutionContext();
 }
 
@@ -296,7 +298,7 @@ bool TestExecutionService::start(const TestResultTargets& resultTargets,
     motionStartRequested_ = false;
     motionStarted_ = false;
     finalizedRecordCount_ = 0;
-    tableOpen_ = false;
+    tableState_ = ExperimentTableState::None;
     userStopRequested_ = false;
     currentRecordDataFinished_ = false;
     pendingTerminalState_.reset();
@@ -323,27 +325,18 @@ bool TestExecutionService::stop(QString* errorMessage)
         return false;
     }
 
-    userStopRequested_ = true;
-    pendingTerminalState_ = ExperimentTerminalState::Terminated;
-    terminalReason_ = QStringLiteral("用户停止");
-    QString acquisitionError;
-    const bool acquisitionAccepted =
-        DataAcquisitionService::instance().stopCollection(&acquisitionError);
-    QString motionError;
-    const bool motionAccepted =
-        !MotionControlService::instance().hasActiveMotion()
-        || MotionControlService::instance().stop(&motionError);
-    if (!acquisitionAccepted || !motionAccepted) {
-        const QString failureMessage =
-            !motionAccepted ? motionError : acquisitionError;
-        setError(errorMessage, failureMessage);
-        failExecution(failureMessage, true);
-        return false;
+    bool accepted = false;
+    {
+        const QScopedValueRollback<bool> stopGuard(terminalStopRequestsInProgress_, true);
+        userStopRequested_ = true;
+        pendingTerminalState_ = ExperimentTerminalState::Terminated;
+        terminalReason_ = QStringLiteral("用户停止");
+        MachineStateManager::instance().updateRunningReason(
+            QStringLiteral("正在停止测试"));
+        accepted = requestExecutionStop(true, errorMessage);
     }
-    MachineStateManager::instance().updateRunningReason(
-        QStringLiteral("正在停止测试"));
-    tryFinishPendingTerminalState(true);
-    return true;
+    tryFinishPendingTerminalState();
+    return accepted;
 }
 bool TestExecutionService::reset(QString* errorMessage)
 {
@@ -397,20 +390,24 @@ void TestExecutionService::handleExperimentTableCreated(
     int repetitionIndex,
     const QString& tableName)
 {
-    // 建表结果来自数据库线程，返回时流程可能已停止或故障。
-    if (currentRepetitionIndex_ != 0
-        && repetitionIndex != currentRepetitionIndex_) {
+    if (!hasActiveExecution() || tableState_ != ExperimentTableState::Creating) {
+        qCWarning(logDatabase) << "忽略非等待建表状态的回执：" << tableName;
+        return;
+    }
+    if (repetitionIndex != currentRepetitionIndex_) {
         failExecution(QStringLiteral("数据库返回了非当前实验的数据表。"),
-                      true);
+                      false);
         return;
     }
 
-    tableOpen_ = true;
+    tableState_ = ExperimentTableState::Open;
     currentRawDataTableName_ = tableName;
-    // 过期建表结果不得再启动采集，但已创建的表仍需正常收尾。
-    if (currentRepetitionIndex_ == 0 || userStopRequested_
-        || pendingTerminalState_.has_value()) {
-        handleCollectionStopped();
+    if (pendingTerminalState_.has_value()) {
+        tryFinishPendingTerminalState();
+        return;
+    }
+    if (userStopRequested_) {
+        requestExperimentTableFinish();
         return;
     }
 
@@ -556,14 +553,14 @@ void TestExecutionService::handleCompletedRecordCountChanged(int completedCount)
         << "executionId=" << executionId_
         << "repetition=" << currentRepetitionIndex_
         << "completedCount=" << completedRecordCount_
-        << "tableOpen=" << tableOpen_;
+        << "tableState=" << static_cast<int>(tableState_);
     tryAdvanceAfterRepetition();
 }
 
 void TestExecutionService::handleAcquisitionBlock(
     const AcquisitionBlock& block)
 {
-    if (currentRepetitionIndex_ == 0) {
+    if (currentRepetitionIndex_ == 0 || tableState_ == ExperimentTableState::Failed) {
         return;
     }
 
@@ -601,24 +598,39 @@ void TestExecutionService::handleAcquisitionBlock(
 
 void TestExecutionService::handleCollectionStopped()
 {
-    if (tableOpen_) {
-        // 采集块和收尾命令进入同一数据库线程队列，
-        // 因此收尾一定排在已发送的数据块之后。
-        QString errorMessage;
-        if (!AcquisitionDatabaseService::instance().finishExperimentTable(
-                &errorMessage)) {
-            if (currentRepetitionIndex_ != 0) {
-                failExecution(errorMessage, true);
-            } else {
-                qCWarning(logDatabase).noquote()
-                    << "流程结束后收尾实验表失败：" << errorMessage;
-            }
-        }
+    if (pendingTerminalState_.has_value()) {
+        tryFinishPendingTerminalState();
         return;
     }
 
-    if (pendingTerminalState_.has_value() && hasActiveExecution()) {
-        finishPendingTerminalState();
+    requestExperimentTableFinish();
+    // 提交失败也会登记终止状态，由同一入口完成故障收尾。
+    tryFinishPendingTerminalState();
+}
+
+void TestExecutionService::requestExperimentTableFinish()
+{
+    if (tableState_ != ExperimentTableState::Open) {
+        return;
+    }
+
+    // 先登记在途状态；结束请求与采集块仍进入同一数据库线程队列。
+    tableState_ = ExperimentTableState::Finishing;
+    qCInfo(logDatabase) << "[流程层][实验表收尾] 提交结束请求"
+                       << "executionId=" << executionId_
+                       << "repetition=" << currentRepetitionIndex_
+                       << "table=" << currentRawDataTableName_;
+    QString errorMessage;
+    if (AcquisitionDatabaseService::instance().finishExperimentTable(&errorMessage)) {
+        return;
+    }
+
+    tableState_ = ExperimentTableState::Failed;
+    const bool alreadyTerminating = pendingTerminalState_.has_value();
+    const QScopedValueRollback<bool> stopGuard(terminalStopRequestsInProgress_, true);
+    recordExecutionFailure(QStringLiteral("实验表收尾失败：%1").arg(errorMessage));
+    if (!alreadyTerminating) {
+        static_cast<void>(requestExecutionStop(true));
     }
 }
 
@@ -628,30 +640,30 @@ void TestExecutionService::handleExperimentTableFinished(
     qint64 sampleCount)
 {
     // 流程已完成、停止或故障时，忽略迟到的收尾通知。
-    if (currentRepetitionIndex_ == 0) {
+    if (!hasActiveExecution() || tableState_ != ExperimentTableState::Finishing) {
         return;
     }
 
     // 异步收尾结果必须属于当前轮次，防止数据表串入其他实验。
     if (repetitionIndex != currentRepetitionIndex_) {
         failExecution(QStringLiteral("数据库结束了非当前实验的数据表。"),
-                      true);
+                      false);
         return;
     }
     if (!currentRawDataTableName_.isEmpty()
         && tableName != currentRawDataTableName_) {
         failExecution(QStringLiteral("数据库结束的数据表名称与当前实验不一致。"),
-                      true);
+                      false);
         return;
     }
     currentRawDataTableName_ = tableName;
     currentRawSampleCount_ = sampleCount;
     // 数据库收尾与完成计数分别到达，后到的条件负责尝试推进。
-    tableOpen_ = false;
+    tableState_ = ExperimentTableState::None;
     currentRecordDataFinished_ = true;
 
     if (pendingTerminalState_.has_value()) {
-        finishPendingTerminalState();
+        tryFinishPendingTerminalState();
         return;
     }
 
@@ -660,6 +672,10 @@ void TestExecutionService::handleExperimentTableFinished(
 
 void TestExecutionService::prepareRepetition(int repetitionIndex)
 {
+    if (tableState_ != ExperimentTableState::None) {
+        return;
+    }
+    tableState_ = ExperimentTableState::Creating;
     const QString name = baseExperimentName_ + QLatin1Char('-') + QString::number(cycleIndexForRecord(repetitionIndex))
         + QLatin1Char('-') + experimentMotionDirectionDisplayText(directionForRecord(repetitionIndex));
     TemperatureDeviceService::instance().beginExperimentRecording(name);
@@ -679,7 +695,7 @@ void TestExecutionService::prepareRepetition(int repetitionIndex)
             directionForRecord(repetitionIndex),
             kAcquisitionSamplePeriodSeconds,
             &errorMessage)) {
-        failExecution(errorMessage, true);
+        failExecution(errorMessage, false);
     }
 }
 
@@ -699,14 +715,12 @@ void TestExecutionService::tryAdvanceAfterRepetition()
     }
 
     if (userStopRequested_ || pendingTerminalState_.has_value()) {
-        if (!tableOpen_) {
-            finishPendingTerminalState();
-        }
+        tryFinishPendingTerminalState();
         return;
     }
     // 下位记录计数和数据库收尾是两个独立完成条件，缺一不可进入下一条记录。
     if (completedRecordCount_ < currentRepetitionIndex_
-        || !currentRecordDataFinished_ || tableOpen_) {
+        || !currentRecordDataFinished_ || tableState_ != ExperimentTableState::None) {
         return;
     }
 
@@ -804,13 +818,14 @@ void TestExecutionService::finalizeExecutionGroup(
     emit experimentGroupFinalized(context);
 }
 
-void TestExecutionService::tryFinishPendingTerminalState(bool databaseUsable)
+void TestExecutionService::tryFinishPendingTerminalState()
 {
-    if (!pendingTerminalState_.has_value()) {
+    if (!hasActiveExecution() || !pendingTerminalState_.has_value()
+        || terminalStopRequestsInProgress_ || finalizingExecution_) {
         return;
     }
-    if (!databaseUsable) {
-        tableOpen_ = false;
+    // 数据库失败时保持原有降级终止策略，但必须先发出停止请求。
+    if (tableState_ == ExperimentTableState::Failed) {
         finishPendingTerminalState();
         return;
     }
@@ -822,29 +837,26 @@ void TestExecutionService::tryFinishPendingTerminalState(bool databaseUsable)
     if (!acquisitionFinished) {
         return;
     }
-    if (!tableOpen_) {
-        finishPendingTerminalState();
+    if (tableState_ == ExperimentTableState::Creating
+        || tableState_ == ExperimentTableState::Finishing) {
         return;
     }
 
-    QString finishError;
-    if (!AcquisitionDatabaseService::instance().finishExperimentTable(
-            &finishError)) {
-        if (!terminalReason_.isEmpty()) {
-            terminalReason_ += QStringLiteral("；");
-        }
-        terminalReason_ += finishError;
-        tableOpen_ = false;
+    requestExperimentTableFinish();
+    if (tableState_ == ExperimentTableState::None
+        || tableState_ == ExperimentTableState::Failed) {
         finishPendingTerminalState();
     }
 }
 
 void TestExecutionService::finishPendingTerminalState()
 {
-    if (!pendingTerminalState_.has_value()) {
+    if (!hasActiveExecution() || !pendingTerminalState_.has_value()
+        || finalizingExecution_) {
         return;
     }
 
+    const QScopedValueRollback<bool> finalizeGuard(finalizingExecution_, true);
     const ExperimentTerminalState state = *pendingTerminalState_;
     const QString reason = terminalReason_;
     finalizeCurrentRepetition(state, reason);
@@ -874,7 +886,7 @@ void TestExecutionService::resetExecutionContext()
     completedRecordCount_ = 0;
     finalizedRecordCount_ = 0;
     currentRawSampleCount_ = 0;
-    tableOpen_ = false;
+    tableState_ = ExperimentTableState::None;
     collectionStarted_ = false;
     currentRecordDataFinished_ = false;
     userStopRequested_ = false;
@@ -888,6 +900,13 @@ void TestExecutionService::failExecution(const QString& message,
                                          bool databaseUsable,
                                          bool requestMotionStop)
 {
+    if (finalizingExecution_) {
+        // 已发布的结果快照不再改写，迟到故障仍立即锁存到机器状态。
+        qCCritical(logApplication).noquote()
+            << "最终结果发布期间发生附加故障：" << message;
+        MachineStateManager::instance().enterFault(message);
+        return;
+    }
     if (!hasActiveExecution()) {
         qCCritical(logApplication).noquote()
             << "机器故障已锁存，等待复位：" << message;
@@ -895,46 +914,73 @@ void TestExecutionService::failExecution(const QString& message,
         return;
     }
 
+    const bool alreadyTerminating = pendingTerminalState_.has_value();
+    {
+        const QScopedValueRollback<bool> stopGuard(terminalStopRequestsInProgress_, true);
+        if (!databaseUsable) {
+            tableState_ = ExperimentTableState::Failed;
+        }
+        recordExecutionFailure(message);
+        if (!alreadyTerminating) {
+            static_cast<void>(requestExecutionStop(requestMotionStop));
+        }
+    }
+    tryFinishPendingTerminalState();
+}
+
+void TestExecutionService::recordExecutionFailure(const QString& message)
+{
+    const bool failureAlreadyReported =
+        pendingTerminalState_ == ExperimentTerminalState::Fault;
     if (pendingTerminalState_.has_value()) {
         qCWarning(logApplication).noquote()
             << "实验终止清理期间发生附加错误：" << message;
-        const bool failureAlreadyReported =
-            *pendingTerminalState_ == ExperimentTerminalState::Fault;
-        pendingTerminalState_ = ExperimentTerminalState::Fault;
         if (!terminalReason_.isEmpty()) {
             terminalReason_ += QStringLiteral("；");
         }
         terminalReason_ += message;
-        if (!failureAlreadyReported) {
-            emit executionFailed(message);
-        }
-        MachineStateManager::instance().enterFault(terminalReason_);
-        tryFinishPendingTerminalState(databaseUsable);
-        return;
+    } else {
+        terminalReason_ = message;
+        qCCritical(logApplication).noquote() << "测试流程失败：" << message;
     }
-
     pendingTerminalState_ = ExperimentTerminalState::Fault;
-    terminalReason_ = message;
-    qCCritical(logApplication).noquote() << "测试流程失败：" << message;
-    MachineStateManager::instance().enterFault(message);
-    emit executionFailed(message);
+    MachineStateManager::instance().enterFault(terminalReason_);
+    if (!failureAlreadyReported) {
+        // UI 会弹模态对话框，延后通知以免中断当前停止请求调用栈。
+        QMetaObject::invokeMethod(
+            this, [this, message] { emit executionFailed(message); },
+            Qt::QueuedConnection);
+    }
+}
 
-    QString ignoredError;
+bool TestExecutionService::requestExecutionStop(bool requestMotionStop,
+                                                QString* errorMessage)
+{
+    QString acquisitionError;
+    bool acquisitionAccepted = true;
     if (DataAcquisitionService::instance().state() != AcquisitionState::Idle) {
-        if (!DataAcquisitionService::instance().stopCollection(&ignoredError)) {
-            qCWarning(logAcquisition).noquote()
-                << "流程故障后停止采集失败：" << ignoredError;
-        }
-    }
-    if (requestMotionStop && MotionControlService::instance().hasActiveMotion()) {
-        ignoredError.clear();
-        if (!MotionControlService::instance().stop(&ignoredError)) {
-            qCWarning(logMotion).noquote()
-                << "流程故障后停止运动失败：" << ignoredError;
+        acquisitionAccepted =
+            DataAcquisitionService::instance().stopCollection(&acquisitionError);
+        if (!acquisitionAccepted) {
+            recordExecutionFailure(
+                QStringLiteral("停止采集请求失败：%1").arg(acquisitionError));
         }
     }
 
-    tryFinishPendingTerminalState(databaseUsable);
+    QString motionError;
+    bool motionAccepted = true;
+    if (requestMotionStop && MotionControlService::instance().hasActiveMotion()) {
+        motionAccepted = MotionControlService::instance().stop(&motionError);
+        if (!motionAccepted) {
+            recordExecutionFailure(
+                QStringLiteral("停止运动请求失败：%1").arg(motionError));
+        }
+    }
+    if (!acquisitionAccepted || !motionAccepted) {
+        setError(errorMessage, !motionAccepted ? motionError : acquisitionError);
+        return false;
+    }
+    return true;
 }
 
 bool TestExecutionService::hasActiveExecution() const
