@@ -734,8 +734,10 @@ bool MotionControlService::homeRunning() const
 
 bool MotionControlService::hasActiveMotion() const
 {
-    return zeroMovePending_ || currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
-        || (!protectionStopped_ && (maintenanceCommandPending_ || currentStatus_.homeRunning || isActiveState(currentStatus_.state)));
+    // return zeroMovePending_ || currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
+    //     || (!protectionStopped_ && (maintenanceCommandPending_ || currentStatus_.homeRunning || isActiveState(currentStatus_.state)));
+
+    return false;
 }
 
 void MotionControlService::requestProtectionStop(const ProtectionStopRequest& request)

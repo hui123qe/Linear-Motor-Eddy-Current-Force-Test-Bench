@@ -1,0 +1,35 @@
+2026-10-15 09:32:38.983 [INFO] [thread 0x12b8] [eddy.application] [main.cpp:33] 应用启动，版本 1.0.0
+2026-10-15 09:32:38.985 [INFO] [thread 0x12b8] [eddy.application] [main.cpp:36] 日志文件 C:/Users/user/Desktop/code/build/vs2022-x64/Debug/logs/高速涡流测试台-2026-10-15.log
+2026-10-15 09:32:38.985 [DEBUG] [thread 0x12b8] [eddy.acquisition] [DataAcquisitionService.cpp:93] [采集流程][服务初始化] 元数据单次轮询定时器已配置，intervalMs= 50
+2026-10-15 09:32:38.986 [INFO] [thread 0x12b8] [eddy.export] [ExperimentExportService.cpp:592] [导出][服务启动] Excel 导出线程已启动
+2026-10-15 09:32:40.800 [INFO] [thread 0x12b8] [eddy.application] [main.cpp:59] 初始化 ACS 电机服务
+2026-10-15 09:32:40.800 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:249] ACS 电机服务线程已启动
+2026-10-15 09:32:40.800 [INFO] [thread 0x12b8] [eddy.safety] [SafetyMonitor.cpp:54] 安全回路监测已绑定 ACS 客户端
+2026-10-15 09:32:40.801 [INFO] [thread 0x12b8] [eddy.safety] [MachineStateManager.cpp:61] 机器状态管理器已绑定安全回路监测
+2026-10-15 09:32:40.803 [INFO] [thread 0x12b8] [eddy.acquisition] [DataAcquisitionService.cpp:152] [采集流程][服务初始化] 已绑定共享 AcsClient，初始状态= "Idle"
+2026-10-15 09:32:40.803 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:280] 请求连接 ACS 控制器
+2026-10-15 09:32:40.804 [INFO] [thread 0x980] [eddy.motion] [AcsClient.cpp:1170] ACS 配置加载成功：mode= "simulator" axis= 2 countsPerMillimeter= 1 pollIntervalMs= 50
+2026-10-15 09:32:41.075 [INFO] [thread 0x12b8] [eddy.configuration] [ParametersPage.cpp:617] 测试配置已加载 C:/Users/user/Desktop/code/build/vs2022-x64/Debug/parameters.json
+2026-10-15 09:32:41.109 [INFO] [thread 0x12b8] [eddy.database] [AcquisitionDatabaseService.cpp:2026] PostgreSQL 已连接：127.0.0.1:5432/eddy_current_bench
+2026-10-15 09:32:42.118 [INFO] [thread 0x980] [eddy.motion] [AcsClient.cpp:133] ACS SDK 连接成功，mode= "simulator" axis= 2
+2026-10-15 09:32:42.118 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:63] ACS 模拟控制器已连接
+2026-10-15 09:32:42.119 [INFO] [thread 0x12b8] [eddy.acquisition] [DataAcquisitionService.cpp:349] [采集流程][连接状态] connected= true state= Idle message= ACS 模拟控制器已连接
+2026-10-15 09:32:42.131 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:85] ACS 状态变化：state= 0 errorCode= 0
+2026-10-15 09:32:42.131 [INFO] [thread 0x12b8] [eddy.motion] [TestExecutionService.cpp:481] [流程层][运动状态] 状态变化 executionId= 0 previousState= 0 state= 0 errorCode= 0
+2026-10-15 09:32:42.133 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:95] ACS 完成记录计数变化：previous= 0 completedCount= 0
+2026-10-15 09:32:42.133 [DEBUG] [thread 0x12b8] [eddy.motion] [TestExecutionService.cpp:539] [流程层][记录推进] 本次测试未启动或正在收尾，忽略完成计数 executionId= 0 completedCount= 0
+2026-10-15 09:32:43.715 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:414] 机器模式切换为 维修
+2026-10-15 09:32:46.222 [INFO] [thread 0x12b8] [eddy.configuration] [ParametersPage.cpp:579] 测试配置已锁定，批次 HIT-HSM-02 --HIT-EC-017
+2026-10-15 09:32:58.463 [INFO] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:414] 机器模式切换为 自动
+2026-10-15 09:33:00.445 [WARN] [thread 0x12b8] [default] [qwindowswindow.cpp:2160] QWindowsWindow::setGeometry: Unable to set geometry 120x30+703+438 (frame: 136x69+695+407) on QWidgetWindow/"QDialogClassWindow" on "CF24A". Resulting geometry: 270x148+703+438 (frame: 286x187+695+407) margins: 8, 31, 8, 8 minimum size: 270x148 MINMAXINFO(maxSize=POINT(x=0, y=0), maxpos=POINT(x=0, y=0), maxtrack=POINT(x=0, y=0), mintrack=POINT(x=286, y=187)))
+2026-10-15 09:33:03.751 [INFO] [thread 0x12b8] [eddy.application] [MachineStateManager.cpp:252] 机器状态变更： 运行 原因： 测试正在运行
+2026-10-15 09:33:03.753 [INFO] [thread 0x12b8] [完成回执] [WorkbenchPage.cpp:442] [工作台][执行上下文] 设置 activeExecutionId executionId= 1792027983753
+2026-10-15 09:33:03.753 [WARN] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:15] 当前状态不允许测试前绝对移动到 0。
+2026-10-15 09:33:03.754 [ERROR] [thread 0x12b8] [eddy.application] [TestExecutionService.cpp:918] 测试流程失败： 当前状态不允许测试前绝对移动到 0。
+2026-10-15 09:33:03.754 [INFO] [thread 0x12b8] [eddy.application] [MachineStateManager.cpp:279] 机器状态变更： 故障 原因： 当前状态不允许测试前绝对移动到 0。
+2026-10-15 09:33:06.405 [WARN] [thread 0x12b8] [eddy.motion] [MotionControlService.cpp:15] ACS 当前状态为 0，没有可停止的运动。
+2026-10-15 09:33:06.405 [WARN] [thread 0x12b8] [eddy.motion] [TestExecutionService.cpp:932] 流程故障后停止运动失败： ACS 当前状态为 0，没有可停止的运动。
+2026-10-15 09:33:06.405 [WARN] [thread 0x12b8] [完成回执] [TestExecutionService.cpp:739] [流程层][单次完成信号] 跳过：采集未启动且没有原始样本 executionId= 1792027983753 repetition= 1 plannedRepeatCount= 1 table= ""
+2026-10-15 09:33:06.405 [INFO] [thread 0x12b8] [完成回执] [TestExecutionService.cpp:798] [流程层][整组完成信号] 发送 experimentGroupFinalized executionId= 1792027983753 plannedRepeatCount= 1 finalizedRecordCount= 0 state= 2
+2026-10-15 09:33:06.405 [INFO] [thread 0x12b8] [完成回执] [ExperimentLogService.cpp:177] [实验日志层][整组完成信号] 接收 experimentGroupFinalized executionId= 1792027983753 plannedRepeatCount= 1 finalizedRecordCount= 0 state= 2
+2026-10-15 09:33:06.405 [WARN] [thread 0x12b8] [完成回执] [ExperimentLogService.cpp:190] [实验日志层][整组完成信号] 没有已完成单次记录，清理整组上下文 executionId= 1792027983753
