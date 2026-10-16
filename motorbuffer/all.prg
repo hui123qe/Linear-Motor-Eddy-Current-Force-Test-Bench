@@ -1,5 +1,5 @@
-#/ Controller version = 4.20
-#/ Date = 10/16/2026 2:08 PM
+#/ Controller version = 4.20.01
+#/ Date = 10/16/2026 4:21 PM
 #/ User remarks = 
 #1
 !PNAME=IO Mapping
@@ -228,7 +228,7 @@ L_POSITION_ACC = ABS(G_N_ACC)
 L_POSITION_DEC = ABS(G_N_DEC)
 L_POSITION_JERK = ABS(G_N_JERK)
 
-Correction_Factor =1.3
+Correction_Factor =1.5
 L_TEST_ACC = ABS(G_TEST_ACC)*Correction_Factor
 L_TEST_DEC = ABS(G_TEST_DEC)*Correction_Factor
 L_TEST_JERK = ABS(G_TEST_JERK)
@@ -265,6 +265,16 @@ END
 
 G_STATE = 20
 
+!DISABLE X
+!
+!WAIT 12000
+!
+!! 启动 Buffer 去皮
+!START 8, 1
+!TILL (PST(8).#RUN = 0)
+!
+EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
+
 
 ! 使能 X 轴。
 !
@@ -278,8 +288,8 @@ G_STATE = 20
 !   6. 正负限位是否正常
 !
 ENABLE X
-ENABLE 0
 ENABLE 1
+ENABLE 0
 
 
 !======================================================================
@@ -327,6 +337,13 @@ PTP X, L_ZERO_POS
 PTP 0, L_ZERO_POS
 PTP 1, L_ZERO_POS
 TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
+
+
+!! 启动 Buffer 去皮
+!START 8, 1
+!TILL (PST(8).#RUN = 0)
+!
+!EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
 
 
 
@@ -1221,7 +1238,13 @@ STOP
 
 ENABLE X
 
-PTP X, 0
+
+VEL(X) =  ABS(G_N_VEL)
+ACC(X) =  ABS(G_N_ACC)
+DEC(X) =  ABS(G_N_DEC)
+JERK(X) = ABS(G_N_JERK)
+
+PTP X, 120
 
 TILL MST(X).4=1
 
@@ -1245,6 +1268,8 @@ WAIT 100
 EC_DOUT3.4 = 0
 
 ENABLE X
+
+PTP X, 0
 
 STOP
 #9
@@ -1544,7 +1569,7 @@ GLOBAL REAL STATIC Y3Y4_CORRECTION_MAP (47)
 
 
 global REAL RPosition_Gantry=1700     !龙门轴的运动位置
-GLOBAL REAL Home_Offset=0       !龙门轴的回零偏移量
+GLOBAL REAL Home_Offset=2       !龙门轴的回零偏移量
 GLOBAL REAL Mass_Factor=0.15         !平衡质量因数
 GLOBAl INT Cycle_No=1                !循环次数
 

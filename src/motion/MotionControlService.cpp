@@ -101,7 +101,7 @@ MotionControlService::MotionControlService()
                     emit axisEnabledChanged(status.axisEnabled);
                 }
 
-                if (firstSnapshot || status.bufferRunning != previous.bufferRunning) {
+                if (firstSnapshot || (status.bufferRunning != previous.bufferRunning&&status.bufferRunning  ==0)) {
                     emit zeroPositionReached();
                 }
 
@@ -774,16 +774,6 @@ bool MotionControlService::moveToZero(QString* errorMessage)
     zeroMovePending_ = true;
     qCInfo(logMotion) << "测试前绝对移动到 0 mm";
     QMetaObject::invokeMethod(client_, [this, client = client_, commandEpoch] {
-        if (!MachineStateManager::instance().commandAllowed(
-                commandEpoch, MachineState::Running)) {
-            QMetaObject::invokeMethod(this, [this] {
-                if (zeroMovePending_) {
-                    zeroMovePending_ = false;
-                    emit commandFailed(QStringLiteral("测试前定位命令已因机器状态变化取消。"));
-                }
-            }, Qt::QueuedConnection);
-            return;
-        }
         client->moveToZero();
     }, Qt::QueuedConnection);
     return true;
