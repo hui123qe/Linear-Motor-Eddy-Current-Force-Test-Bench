@@ -993,7 +993,8 @@ void AcsClient::pollStatus()
         return;
     }
 
-    const bool hardwareEmergencyStopActive = hardwareEmergencyStop != 0;
+    // Hardware emergency-stop loop: 0 = triggered, 1 = normal.
+    const bool hardwareEmergencyStopActive = hardwareEmergencyStop == 0;
     safetyStatus.hardwareEmergencyStop.rawValue = hardwareEmergencyStop;
     safetyStatus.hardwareEmergencyStop.state =
         hardwareEmergencyStopActive ? SafetyPointState::Triggered
