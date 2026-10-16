@@ -57,6 +57,7 @@ struct AcsMotionStatus
     bool axisMoving = false;
     double feedbackPositionMillimeters = 0.0;
     double feedbackVelocityMillimetersPerSecond = 0.0;
+    bool bufferRunning = false;
 };
 
 enum class MaintenanceCommand

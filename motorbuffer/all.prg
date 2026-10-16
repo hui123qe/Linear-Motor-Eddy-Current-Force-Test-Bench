@@ -1,5 +1,5 @@
-#/ Controller version = 4.20.01
-#/ Date = 10/15/2026 4:44 PM
+#/ Controller version = 4.20
+#/ Date = 10/16/2026 2:08 PM
 #/ User remarks = 
 #1
 !PNAME=IO Mapping
@@ -278,6 +278,8 @@ G_STATE = 20
 !   6. 正负限位是否正常
 !
 ENABLE X
+ENABLE 0
+ENABLE 1
 
 
 !======================================================================
@@ -325,13 +327,6 @@ PTP X, L_ZERO_POS
 PTP 0, L_ZERO_POS
 PTP 1, L_ZERO_POS
 TILL (MST(0).4=1 & MST(1).4=1 & MST(X).4=1)
-
-
-! 启动 Buffer 去皮
-START 8, 1
-TILL (PST(8).#RUN = 0)
-
-EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
 
 
 
@@ -1224,6 +1219,11 @@ STOP
 !PNAME=
 !PDESC=
 
+ENABLE X
+
+PTP X, 0
+
+TILL MST(X).4=1
 
 ! 前提：输出映射已建立，去皮位当前为0
 IF ECST.#OP = 0
@@ -1231,14 +1231,20 @@ IF ECST.#OP = 0
     STOP
 END
 
+DISABLE X
+
+WAIT 12000                 ! 测试开始：关闭自动校准
 ! 发出去皮信号
 EC_DOUT3.4 = 1
+EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
 
 ! 示例保持100ms，实际按传感器手册设置
-WAIT 100
+WAIT 100 
 
 ! 释放去皮信号，为下一次触发做准备
 EC_DOUT3.4 = 0
+
+ENABLE X
 
 STOP
 #9

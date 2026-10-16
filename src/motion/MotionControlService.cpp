@@ -100,12 +100,19 @@ MotionControlService::MotionControlService()
                 if (firstSnapshot || status.axisEnabled != previous.axisEnabled) {
                     emit axisEnabledChanged(status.axisEnabled);
                 }
+
+                if (firstSnapshot || status.bufferRunning != previous.bufferRunning) {
+                    emit zeroPositionReached();
+                }
+
                 if (firstSnapshot || status.homeDone != previous.homeDone) {
                     emit homeDoneChanged(status.homeDone);
                 }
+
                 if (firstSnapshot || status.homeRunning != previous.homeRunning) {
                     emit homeRunningChanged(status.homeRunning);
                 }
+                
                 // 反馈持续发布，保证重连后即使位置不变也能恢复显示。
                 emit positionFeedbackChanged(status.feedbackPositionMillimeters);
                 emit velocityFeedbackChanged(status.feedbackVelocityMillimetersPerSecond);

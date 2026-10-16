@@ -562,28 +562,22 @@ void AcsClient::start(const MotionStartRequest& request)
 
 void AcsClient::moveToZero()
 {
-    qCInfo(logMotion) << "测试前绝对定位：acsc_ToPoint，axis=" << axis_ << "target=0";
+    qCInfo(logMotion) << "测试前准备移动到零点：acsc_ToPoint，axis=" << axis_ << "target=0";
     if (controllerHandle_ == ACSC_INVALID) {
         emit commandFailed(QStringLiteral("ACS 未连接，不能定位到 0。"));
         return;
     }
-    if (acsc_Enable(static_cast<HANDLE>(controllerHandle_), axis_,
-                    ACSC_SYNCHRONOUS) == 0) {
-        emit commandFailed(sdkError(QStringLiteral("测试前轴使能失败")));
+
+    if (!acsc_RunBuffer(static_cast<HANDLE>(controllerHandle_), ACSC_BUFFER_8,
+                        NULL, ACSC_SYNCHRONOUS))
+    {
+        emit commandFailed(sdkError(QStringLiteral("启动buffer 8 失败")));
         return;
     }
-    if (acsc_ToPoint(static_cast<HANDLE>(controllerHandle_), 0, axis_,
-                     0.0, ACSC_SYNCHRONOUS) == 0) {
-        emit commandFailed(sdkError(QStringLiteral("测试前定位到 0 失败")));
-        return;
-    }
+
     zeroMovePending_ = true;
-    if (!acsc_WaitMotionEnd(static_cast<HANDLE>(controllerHandle_), axis_, 10000)) {
-        emit commandFailed(sdkError(QStringLiteral("等待测试前定位到 0 完成失败")));
-        return;
-    }
     zeroMovePending_ = false;
-    emit zeroPositionReached();
+   
 }
 
 void AcsClient::stop()
@@ -1075,6 +1069,21 @@ void AcsClient::pollStatus()
             sdkError(QStringLiteral("读取 ACS 轴状态失败")));
         return;
     }
+
+    int programState = 0;
+    if (!acsc_GetProgramState(
+                static_cast<HANDLE>(controllerHandle_),
+                ACSC_BUFFER_8,
+                &programState,
+                ACSC_SYNCHRONOUS))
+        {  
+            handleCommunicationFailure(
+            sdkError(QStringLiteral("读取 ACS 轴状态失败")));
+            return  ;
+        }
+
+    bool running = (programState & ACSC_PST_RUN) != 0;
+    status.bufferRunning = running;
 
     status.axisEnabled = (motorState & ACSC_MST_ENABLE) != 0;
     status.axisMoving = (motorState & ACSC_MST_MOVE) != 0;
