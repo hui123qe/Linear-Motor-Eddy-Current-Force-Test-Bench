@@ -24,11 +24,12 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+#include <limits>
 #include <optional>
 
 namespace {
 
-constexpr qsizetype maximumChartPointCount = 100000;
+constexpr int maximumChartPointCount = std::numeric_limits<int>::max();
 
 const QString& eddyForceCurveId()
 {
@@ -214,7 +215,7 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
     forceCurve.id = eddyForceCurveId();
     forceCurve.displayName = QStringLiteral("涡流力");
     forceCurve.color = QColor(QStringLiteral("#1f78d1"));
-    forceCurve.maximumPointCount = static_cast<int>(maximumChartPointCount);
+    forceCurve.maximumPointCount = maximumChartPointCount;
     chartWidget_->addCurve(forceCurve);
     curveLayout->addWidget(chartWidget_, 1);
     primaryRow->addWidget(curvePanel, 5);
@@ -662,12 +663,6 @@ void WorkbenchPage::appendForcePositionSamples(
     }
     for (const QPointF& sample : samples) {
         pendingChartSamples_.append(sample);
-    }
-
-    const qsizetype overflow =
-        pendingChartSamples_.size() - maximumChartPointCount;
-    if (overflow > 0) {
-        pendingChartSamples_.remove(0, overflow);
     }
 }
 

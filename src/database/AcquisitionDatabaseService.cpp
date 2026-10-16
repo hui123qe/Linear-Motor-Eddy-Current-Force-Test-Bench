@@ -1201,8 +1201,6 @@ public:
 
     bool readExperimentRawDataForExport(
         const QString& tableName,
-        double statisticsStartMeters,
-        double statisticsEndMeters,
         qint64 offset,
         int limit,
         QVector<ExperimentSample>* samples,
@@ -1220,19 +1218,12 @@ public:
             return false;
         }
 
-        const double minimumPosition =
-            std::min(statisticsStartMeters, statisticsEndMeters);
-        const double maximumPosition =
-            std::max(statisticsStartMeters, statisticsEndMeters);
         QSqlQuery query(database_);
         query.prepare(QStringLiteral(
             "SELECT relative_time_ms,acceleration_m_s2,velocity_m_s,"
             "motor_current,motor_temperature,force_n,position_m FROM %1 "
-            "WHERE position_m BETWEEN ? AND ? "
             "ORDER BY relative_time_ms LIMIT ? OFFSET ?")
                           .arg(qualifyTable(tableName)));
-        query.addBindValue(minimumPosition);
-        query.addBindValue(maximumPosition);
         query.addBindValue(limit);
         query.addBindValue(offset);
         if (!query.exec()) {
@@ -1966,8 +1957,6 @@ bool AcquisitionDatabaseService::readExperimentSummaryForExport(
 
 bool AcquisitionDatabaseService::readExperimentRawDataForExport(
     const QString& tableName,
-    double statisticsStartMeters,
-    double statisticsEndMeters,
     qint64 offset,
     int limit,
     QVector<ExperimentSample>* samples,
@@ -1978,8 +1967,6 @@ bool AcquisitionDatabaseService::readExperimentRawDataForExport(
         return false;
     }
     if (tableName.trimmed().isEmpty()
-        || !std::isfinite(statisticsStartMeters)
-        || !std::isfinite(statisticsEndMeters)
         || offset < 0 || limit <= 0 || limit > kMaximumReadPageSize
         || samples == nullptr) {
         setError(errorMessage, QStringLiteral("实验导出数据读取参数无效。"));
@@ -1995,8 +1982,6 @@ bool AcquisitionDatabaseService::readExperimentRawDataForExport(
         worker_,
         [worker = worker_,
          tableName,
-         statisticsStartMeters,
-         statisticsEndMeters,
          offset,
          limit,
          samples,
@@ -2004,8 +1989,6 @@ bool AcquisitionDatabaseService::readExperimentRawDataForExport(
          &readSucceeded] {
             readSucceeded = worker->readExperimentRawDataForExport(
                 tableName,
-                statisticsStartMeters,
-                statisticsEndMeters,
                 offset,
                 limit,
                 samples,

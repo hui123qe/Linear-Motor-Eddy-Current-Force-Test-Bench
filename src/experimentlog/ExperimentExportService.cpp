@@ -422,8 +422,6 @@ private:
             if (!AcquisitionDatabaseService::instance()
                      .readExperimentRawDataForExport(
                          record.rawDataTableName,
-                         record.statisticsStartMeters,
-                         record.statisticsEndMeters,
                          offset,
                          kExportPageSize,
                          &samples,

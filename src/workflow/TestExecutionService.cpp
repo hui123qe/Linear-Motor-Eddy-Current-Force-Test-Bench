@@ -571,25 +571,14 @@ void TestExecutionService::handleAcquisitionBlock(
         return;
     }
 
-    const TestMotionParameters motionParameters =
-        selectedTestMotionParameters(parameters_);
-    const double minimumPosition =
-        std::min(motionParameters.acquisitionStartMeters,
-                 motionParameters.acquisitionEndMeters);
-    const double maximumPosition =
-        std::max(motionParameters.acquisitionStartMeters,
-                 motionParameters.acquisitionEndMeters);
     const qsizetype sampleCount =
         std::min(block.positionMeters.size(), block.forceNewtons.size());
     QVector<QPointF> samples;
     samples.reserve(sampleCount);
     for (qsizetype index = 0; index < sampleCount; ++index) {
         const double positionMeters = block.positionMeters.at(index);
-        if (positionMeters >= minimumPosition
-            && positionMeters <= maximumPosition) {
-            samples.append(
-                QPointF(positionMeters, block.forceNewtons.at(index)));
-        }
+        samples.append(
+            QPointF(positionMeters, block.forceNewtons.at(index)));
     }
     if (!samples.isEmpty()) {
         emit chartSamplesReady(samples);

@@ -77,8 +77,6 @@ public:
         QString* errorMessage = nullptr);
     [[nodiscard]] bool readExperimentRawDataForExport(
         const QString& tableName,
-        double statisticsStartMeters,
-        double statisticsEndMeters,
         qint64 offset,
         int limit,
         QVector<ExperimentSample>* samples,
