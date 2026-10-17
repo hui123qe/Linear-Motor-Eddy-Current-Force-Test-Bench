@@ -108,6 +108,7 @@ void SafetyMonitor::reportMonitoringFailure(const QString& message)
 {
     SafetyStatusSnapshot failedStatus = snapshot();
     failedStatus.hardwareEmergencyStop.state = SafetyPointState::Unknown;
+    failedStatus.acsplProgramError = false;
     for (SafetyPointStatus& light : failedStatus.safetyLights) {
         light.state = SafetyPointState::Unknown;
     }
@@ -125,6 +126,7 @@ bool SafetyMonitor::snapshotDiffersFromCurrent(
                != snapshot.hardwareEmergencyStop.state
         || snapshot_.hardwareEmergencyStop.rawValue
                != snapshot.hardwareEmergencyStop.rawValue
+        || snapshot_.acsplProgramError != snapshot.acsplProgramError
         || snapshot_.detail != snapshot.detail) {
         return true;
     }
@@ -146,6 +148,10 @@ bool SafetyMonitor::snapshotDiffersFromCurrent(
 SafetyState SafetyMonitor::stateFromSnapshot(
     const SafetyStatusSnapshot& snapshot)
 {
+    if (snapshot.acsplProgramError) {
+        return SafetyState::Triggered;
+    }
+
     switch (snapshot.hardwareEmergencyStop.state) {
     case SafetyPointState::Triggered:
         return SafetyState::Triggered;
@@ -166,6 +172,9 @@ QString SafetyMonitor::stateReason(
     case SafetyState::Normal:
         return QStringLiteral("硬件安全回路正常");
     case SafetyState::Triggered:
+        if (snapshot.acsplProgramError) {
+            return QStringLiteral("ACSPL+ Program Error");
+        }
         return QStringLiteral("ACS 硬件急停已触发");
     case SafetyState::Unknown:
         return snapshot.detail.isEmpty()

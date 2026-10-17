@@ -153,30 +153,6 @@ void AcsClient::disconnectController()
     }
 }
 
-void AcsClient::emergencyStop()
-{
-    zeroMovePending_ = false;
-    if (controllerHandle_ == ACSC_INVALID) {
-        const QString message =
-            QStringLiteral("ACS 控制器未连接，不能执行软件急停。");
-        qCCritical(logMotion).noquote() << message;
-        emit emergencyStopFailed(message);
-        return;
-    }
-
-    qCCritical(logMotion) << "执行软件急停：ACS Kill All";
-    if (acsc_KillAll(static_cast<HANDLE>(controllerHandle_),
-                     ACSC_SYNCHRONOUS)
-        == 0) {
-        const QString message = sdkError(QStringLiteral("ACS Kill All 软件急停失败"));
-        qCCritical(logMotion).noquote() << message;
-        emit emergencyStopFailed(message);
-        return;
-    }
-
-    emit emergencyStopCompleted();
-}
-
 void AcsClient::stopConfiguredBufferAndKillAll(const ProtectionStopRequest& request)
 {
     zeroMovePending_ = false;
@@ -995,6 +971,14 @@ void AcsClient::pollStatus()
                                     : SafetyPointState::Normal;
 
     QString safetyReadError;
+    int systemFault = 0;
+    if (!readInteger("S_FAULT", &systemFault, &safetyReadError)) {
+        emit safetyStatusReadFailed(safetyReadError);
+        handleCommunicationFailure(safetyReadError);
+        return;
+    }
+    safetyStatus.acsplProgramError = (systemFault & ACSC_SAFETY_PROG) != 0;
+
     for (std::size_t index = 0;
          index < AcsVariableNames::safetyLightValues.size();
          ++index) {

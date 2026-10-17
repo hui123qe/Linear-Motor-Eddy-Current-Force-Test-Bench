@@ -213,18 +213,6 @@ TestExecutionService::TestExecutionService()
             &MotionControlService::controllerResetFailed,
             this,
             &TestExecutionService::handleControllerResetFailed);
-    connect(&motionService,
-            &MotionControlService::emergencyStopCompleted,
-            this,
-            [this] {
-                failExecution(QStringLiteral("软件急停已触发。"), true);
-            });
-    connect(&motionService,
-            &MotionControlService::emergencyStopFailed,
-            this,
-            [this](const QString& message) {
-                failExecution(message, true);
-            });
     connect(&machineStateManager,
             &MachineStateManager::machineStateChanged,
             this,

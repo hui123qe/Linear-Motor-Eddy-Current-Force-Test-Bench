@@ -93,7 +93,6 @@ public slots:
     void connectController();
     void disconnectController();
     void resetController();
-    void emergencyStop();
     void stopConfiguredBufferAndKillAll(const ProtectionStopRequest& request);
     void tareForceSensor();
     void enableAxis();
@@ -118,8 +117,6 @@ signals:
     void safetyStatusReadFailed(const QString& message);
     void controllerResetCompleted();
     void controllerResetFailed(const QString& message);
-    void emergencyStopCompleted();
-    void emergencyStopFailed(const QString& message);
     void protectionStopResult(const ProtectionStopResult& result);
     void statusChanged(const AcsMotionStatus& status);
     void sensorReadingsChanged(const AcsSensorReadings& readings);

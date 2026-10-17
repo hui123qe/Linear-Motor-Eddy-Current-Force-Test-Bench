@@ -3,11 +3,9 @@
 #include "../motion/MotionControlService.h"
 #include "widgets/ViewHelpers.h"
 
-#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
-#include <QMouseEvent>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -33,8 +31,9 @@ HeaderBar::HeaderBar(QWidget* parent)
         QStringLiteral("■ 软件急停"), QStringLiteral("danger"));
     emergencyStopButton_->setObjectName(QStringLiteral("emergencyStop"));
     emergencyStopButton_->setMinimumSize(132, 46);
-    emergencyStopButton_->setToolTip(QStringLiteral("双击执行软件急停"));
-    emergencyStopButton_->installEventFilter(this);
+    emergencyStopButton_->setToolTip(QStringLiteral("单击执行软件急停"));
+    connect(emergencyStopButton_, &QPushButton::clicked,
+            this, &HeaderBar::onEmergencyStopClicked);
     layout->addWidget(emergencyStopButton_);
 
     MotionControlService& motionService = MotionControlService::instance();
@@ -48,20 +47,6 @@ HeaderBar::HeaderBar(QWidget* parent)
             this,
             &HeaderBar::handleEmergencyStopFailed,
             Qt::QueuedConnection);
-}
-
-bool HeaderBar::eventFilter(QObject* watched, QEvent* event)
-{
-    if (watched == emergencyStopButton_
-        && event->type() == QEvent::MouseButtonDblClick) {
-        const auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton) {
-            onEmergencyStopClicked();
-            return true;
-        }
-    }
-
-    return QWidget::eventFilter(watched, event);
 }
 
 void HeaderBar::onEmergencyStopClicked()
@@ -82,7 +67,7 @@ void HeaderBar::handleEmergencyStopCompleted()
     QMessageBox::warning(
         this,
         QStringLiteral("软件急停"),
-        QStringLiteral("ACS Kill All 已执行，控制器当前运动已终止。"));
+        QStringLiteral("指定 Buffer 已停止，Kill All 已执行，全轴运动已终结。"));
 }
 
 void HeaderBar::handleEmergencyStopFailed(const QString& message)

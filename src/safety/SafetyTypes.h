@@ -33,6 +33,7 @@ struct SafetyPointStatus
 struct SafetyStatusSnapshot
 {
     SafetyPointStatus hardwareEmergencyStop;
+    bool acsplProgramError = false;
     std::array<SafetyPointStatus, kSafetyLightCount> safetyLights{};
     SafetyPointStatus safetyDoorLock;
     QDateTime sampledAtUtc;

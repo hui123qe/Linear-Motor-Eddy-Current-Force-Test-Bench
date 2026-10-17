@@ -1,6 +1,7 @@
 #include "MotionControlService.h"
 
 #include "../config/TestParameters.h"
+#include "../globh.h"
 #include "../logging/AppLogger.h"
 #include "../machine/MachineStateManager.h"
 
@@ -137,19 +138,6 @@ MotionControlService::MotionControlService()
                 maintenanceCommandPending_ = false;
                 emit controllerResetFailed(message);
             });
-    connect(client_,
-            &AcsClient::emergencyStopCompleted,
-            this,
-            [this] {
-                zeroMovePending_ = false;
-                maintenanceCommandPending_ = false;
-                forceTarePending_ = false;
-                emit emergencyStopCompleted();
-            });
-    connect(client_,
-            &AcsClient::emergencyStopFailed,
-            this,
-            &MotionControlService::emergencyStopFailed);
     connect(client_, &AcsClient::protectionStopResult, this,
             &MotionControlService::protectionStopResult, Qt::DirectConnection);
     connect(client_, &AcsClient::protectionStopResult, this, [this](const ProtectionStopResult& result) {
@@ -160,6 +148,15 @@ MotionControlService::MotionControlService()
             zeroMovePending_ = false;
             maintenanceCommandPending_ = false;
             forceTarePending_ = false;
+        }
+        if (result.occurrenceId == emergencyStopOccurrenceId_
+            && result.state != ProtectionStopState::Pending) {
+            emergencyStopOccurrenceId_ = {};
+            if (result.state == ProtectionStopState::Confirmed) {
+                emit emergencyStopCompleted();
+            } else {
+                emit emergencyStopFailed(result.detail);
+            }
         }
     });
     connect(client_,
@@ -322,9 +319,12 @@ bool MotionControlService::emergencyStop(QString* errorMessage)
         return false;
     }
 
-    qCCritical(logMotion) << "请求执行软件急停：ACS Kill All";
-    QMetaObject::invokeMethod(
-        client_, &AcsClient::emergencyStop, Qt::QueuedConnection);
+    const QString reason = QStringLiteral("软件急停已触发。");
+    qCCritical(logMotion) << "请求执行软件急停：StopBuffer + KillAll";
+    MachineStateManager::instance().enterFault(reason);
+    emergencyStopOccurrenceId_ = QUuid::createUuid();
+    requestProtectionStop({emergencyStopOccurrenceId_, g_temperatureFaultStopBuffer,
+                           g_temperatureFaultStopTimeoutMs, reason});
     return true;
 }
 
