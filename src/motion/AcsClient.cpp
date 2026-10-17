@@ -3,7 +3,6 @@
 #include "AcsVariableNames.h"
 
 #include "../logging/AppLogger.h"
-#include "../globh.h"
 
 #include <ACSC.h>
 
@@ -163,6 +162,11 @@ void AcsClient::stopConfiguredBufferAndKillAll(const ProtectionStopRequest& requ
     qCCritical(logMotion) << "故障保护请求" << request.occurrenceId << request.reason << "StopBuffer=" << request.buffer << "随后 KillAll";
     QStringList errors;
     result.bufferStopSucceeded = request.buffer >= 0 && acsc_StopBuffer(handle, request.buffer, ACSC_SYNCHRONOUS) != 0;
+    result.bufferStopSucceeded = acsc_StopBuffer(handle, 3, ACSC_SYNCHRONOUS) != 0 && result.bufferStopSucceeded;
+    result.bufferStopSucceeded = acsc_StopBuffer(handle, 5, ACSC_SYNCHRONOUS) != 0 && result.bufferStopSucceeded;
+    result.bufferStopSucceeded = acsc_StopBuffer(handle, 6, ACSC_SYNCHRONOUS) != 0 && result.bufferStopSucceeded;
+    result.bufferStopSucceeded = acsc_StopBuffer(handle, 7, ACSC_SYNCHRONOUS) != 0 && result.bufferStopSucceeded;
+    result.bufferStopSucceeded = acsc_StopBuffer(handle, 8, ACSC_SYNCHRONOUS) != 0 && result.bufferStopSucceeded;
     if (!result.bufferStopSucceeded) { errors.append(sdkError(QStringLiteral("停止指定 Buffer 失败"))); }
     // A failed StopBuffer must never skip the motion termination request.
     result.killAllSucceeded = acsc_KillAll(handle, ACSC_SYNCHRONOUS) != 0;
@@ -286,29 +290,18 @@ void AcsClient::resetController()
         return;
     }
 
-    // 在同一工作线程中同步完成停止、启动，期间轮询不会插入。
     const HANDLE handle = static_cast<HANDLE>(controllerHandle_);
-    QVector<int> resetBuffers;
-    for (const int buffer : kResetBuffers) { resetBuffers.append(buffer); }
-    if (g_temperatureFaultStopBuffer < 0) {
-        emit controllerResetFailed(QStringLiteral("全局故障停止 Buffer 配置无效。")); return;
-    }
-    if (!resetBuffers.contains(g_temperatureFaultStopBuffer)) { resetBuffers.append(g_temperatureFaultStopBuffer); }
-    for (const int buffer : resetBuffers) {
-        qCInfo(logMotion) << "复位：停止 ACS Buffer" << buffer;
-        if (acsc_StopBuffer(handle, buffer, ACSC_SYNCHRONOUS) == 0) {
-            const QString message = sdkError(
-                QStringLiteral("复位失败：停止 ACS Buffer %1 失败，部分程序可能已停止。")
-                    .arg(buffer));
-            qCCritical(logMotion).noquote() << message;
-            emit controllerResetFailed(message);
-            return;
-        }
+    qCInfo(logMotion) << "复位：停止全部 ACS Buffer";
+    if (acsc_StopBuffer(handle, ACSC_BUFFER_ALL, ACSC_SYNCHRONOUS) == 0) {
+        const QString message = sdkError(QStringLiteral("复位失败：停止全部 ACS Buffer 失败。"));
+        qCCritical(logMotion).noquote() << message;
+        emit controllerResetFailed(message);
+        return;
     }
     if (!writeInteger("G_START_REQ", 0, nullptr)) {
         emit controllerResetFailed(QStringLiteral("复位前清除旧启动请求失败。")); return;
     }
-    for (const int buffer : resetBuffers) {
+    for (const int buffer : kResetBuffers) {
         qCInfo(logMotion) << "复位：启动 ACS Buffer" << buffer;
         if (acsc_RunBuffer(handle, buffer, nullptr, ACSC_SYNCHRONOUS) == 0) {
             const QString message = sdkError(
@@ -319,8 +312,17 @@ void AcsClient::resetController()
             return;
         }
     }
+    char autoexecLabel[] = "AUTOEXEC";
+    qCInfo(logMotion) << "复位：从 AUTOEXEC 启动 ACS Buffer 7";
+    if (acsc_RunBuffer(handle, ACSC_BUFFER_7, autoexecLabel, ACSC_SYNCHRONOUS) == 0) {
+        const QString message = sdkError(
+            QStringLiteral("复位失败：从 AUTOEXEC 启动 ACS Buffer 7 失败。"));
+        qCCritical(logMotion).noquote() << message;
+        emit controllerResetFailed(message);
+        return;
+    }
 
-    qCInfo(logMotion) << "复位完成：ACS Buffer 已恢复待命" << resetBuffers;
+    qCInfo(logMotion) << "复位完成：ACS Buffer 1、2、3、7 已重新启动";
     emit controllerResetCompleted();
 }
 

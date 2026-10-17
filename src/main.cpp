@@ -10,7 +10,6 @@
 #include "workflow/TestExecutionService.h"
 #include "temperature/TemperatureDeviceService.h"
 #include "alarm/AlarmService.h"
-#include "globh.h"
 
 #include <QApplication>
 #include <QFile>
@@ -63,14 +62,10 @@ int main(int argc, char* argv[])
     TemperatureDeviceService& temperatureService = TemperatureDeviceService::instance();
     AlarmService& alarmService = AlarmService::instance();
     QObject::connect(&alarmService, &AlarmService::alarmRaised,
-                     &machineStateManager, [&machineStateManager](const AlarmRecord& record) {
-        if (record.code == QStringLiteral("TEMP_FAULT")) { machineStateManager.enterFault(record.title); }
-    }, Qt::DirectConnection);
-    QObject::connect(&alarmService, &AlarmService::alarmRaised,
                      &motionControlService, [&motionControlService](const AlarmRecord& record) {
-        if (record.code != QStringLiteral("TEMP_FAULT")) { return; }
-        motionControlService.requestProtectionStop({record.occurrenceId, g_temperatureFaultStopBuffer,
-            record.title});
+        if (record.code == QStringLiteral("TEMP_FAULT")) {
+            static_cast<void>(motionControlService.emergencyStop());
+        }
     }, Qt::DirectConnection);
     alarmService.initialize(&temperatureService, &safetyMonitor, motionControlService.acsClient());
     temperatureService.initialize();
