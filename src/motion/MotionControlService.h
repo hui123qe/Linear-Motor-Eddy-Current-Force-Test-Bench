@@ -110,6 +110,5 @@ private:
     bool forceTarePending_ = false;
     bool connected_ = false;
     bool initialized_ = false;
-    bool protectionStopped_ = false;
     QUuid emergencyStopOccurrenceId_;
 };

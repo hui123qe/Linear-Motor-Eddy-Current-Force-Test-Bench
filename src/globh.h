@@ -19,4 +19,3 @@ inline QVector<double> g_temperatureSimulatedCelsius{25.0, 26.0, 27.0, 28.0};
 
 // 温度故障先停止指定 Buffer，再 Kill 所有运动。
 inline int g_temperatureFaultStopBuffer = 2;
-inline int g_temperatureFaultStopTimeoutMs = 5000;

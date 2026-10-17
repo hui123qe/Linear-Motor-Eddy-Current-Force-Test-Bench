@@ -50,7 +50,6 @@ MotionControlService::MotionControlService()
             this,
             [this](bool connected, const QString& message) {
                 connected_ = connected;
-                if (!connected) { protectionStopped_ = false; }
                 if (!connected) {
                     zeroMovePending_ = false;
                     maintenanceCommandPending_ = false;
@@ -128,7 +127,6 @@ MotionControlService::MotionControlService()
             [this] {
                 zeroMovePending_ = false;
                 maintenanceCommandPending_ = false;
-                protectionStopped_ = false;
                 emit controllerResetCompleted();
             });
     connect(client_,
@@ -142,17 +140,16 @@ MotionControlService::MotionControlService()
             &MotionControlService::protectionStopResult, Qt::DirectConnection);
     connect(client_, &AcsClient::protectionStopResult, this, [this](const ProtectionStopResult& result) {
         qCInfo(logMotion) << "故障停止反馈" << result.occurrenceId
-                         << "state=" << static_cast<int>(result.state) << result.detail;
-        protectionStopped_ = result.state == ProtectionStopState::Confirmed;
-        if (protectionStopped_) {
+                         << result.detail;
+        const bool succeeded = result.bufferStopSucceeded && result.killAllSucceeded;
+        if (succeeded) {
             zeroMovePending_ = false;
             maintenanceCommandPending_ = false;
             forceTarePending_ = false;
         }
-        if (result.occurrenceId == emergencyStopOccurrenceId_
-            && result.state != ProtectionStopState::Pending) {
+        if (result.occurrenceId == emergencyStopOccurrenceId_) {
             emergencyStopOccurrenceId_ = {};
-            if (result.state == ProtectionStopState::Confirmed) {
+            if (succeeded) {
                 emit emergencyStopCompleted();
             } else {
                 emit emergencyStopFailed(result.detail);
@@ -324,7 +321,7 @@ bool MotionControlService::emergencyStop(QString* errorMessage)
     MachineStateManager::instance().enterFault(reason);
     emergencyStopOccurrenceId_ = QUuid::createUuid();
     requestProtectionStop({emergencyStopOccurrenceId_, g_temperatureFaultStopBuffer,
-                           g_temperatureFaultStopTimeoutMs, reason});
+                           reason});
     return true;
 }
 
@@ -741,9 +738,6 @@ bool MotionControlService::homeRunning() const
 
 bool MotionControlService::hasActiveMotion() const
 {
-    // return zeroMovePending_ || currentStatus_.axisMoving || std::abs(currentStatus_.feedbackVelocityMillimetersPerSecond) > 0.001
-    //     || (!protectionStopped_ && (maintenanceCommandPending_ || currentStatus_.homeRunning || isActiveState(currentStatus_.state)));
-
     return false;
 }
 
@@ -751,7 +745,7 @@ void MotionControlService::requestProtectionStop(const ProtectionStopRequest& re
 {
     if (!workerThread_.isRunning()) {
         qCWarning(logMotion) << "故障停止请求失败：ACS 工作线程未启动" << request.occurrenceId;
-        emit protectionStopResult({request.occurrenceId, request.buffer, ProtectionStopState::Failed,
+        emit protectionStopResult({request.occurrenceId, request.buffer,
             false, false, QStringLiteral("ACS 工作线程未启动")}); return;
     }
     QMetaObject::invokeMethod(client_, [client = client_, request] { client->stopConfiguredBufferAndKillAll(request); }, Qt::QueuedConnection);

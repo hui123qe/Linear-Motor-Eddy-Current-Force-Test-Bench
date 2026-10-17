@@ -7,20 +7,16 @@
 #include <QObject>
 #include <QString>
 #include <QUuid>
-#include <QMap>
 
 #include <array>
 
 class QTimer;
 
 // Execution feedback belongs to motion control, independent of alarm lifecycle.
-enum class ProtectionStopState { Pending, Confirmed, Failed, TimedOut };
-
 struct ProtectionStopRequest
 {
     QUuid occurrenceId;
     int buffer = -1;
-    int timeoutMs = 5000;
     QString reason;
 };
 
@@ -28,7 +24,6 @@ struct ProtectionStopResult
 {
     QUuid occurrenceId;
     int buffer = -1;
-    ProtectionStopState state = ProtectionStopState::Pending;
     bool bufferStopSucceeded = false;
     bool killAllSucceeded = false;
     QString detail;
@@ -140,7 +135,6 @@ signals:
 private slots:
     void pollStatus();
     void pollSensors();
-    void verifyProtectionStops();
 
 private:
     [[nodiscard]] bool loadConfiguration(QString* errorMessage);
@@ -185,9 +179,6 @@ private:
     void* controllerHandle_;
     QTimer* pollTimer_ = nullptr;
     QTimer* sensorPollTimer_ = nullptr;
-    QTimer* protectionTimer_ = nullptr;
-    QMap<QUuid, ProtectionStopResult> pendingProtectionStops_;
-    QMap<QUuid, qint64> protectionDeadlines_;
     QString connectionMode_;
     QString address_;
     int port_ = 0;

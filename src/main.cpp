@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
                      &motionControlService, [&motionControlService](const AlarmRecord& record) {
         if (record.code != QStringLiteral("TEMP_FAULT")) { return; }
         motionControlService.requestProtectionStop({record.occurrenceId, g_temperatureFaultStopBuffer,
-            g_temperatureFaultStopTimeoutMs, record.title});
+            record.title});
     }, Qt::DirectConnection);
     alarmService.initialize(&temperatureService, &safetyMonitor, motionControlService.acsClient());
     temperatureService.initialize();

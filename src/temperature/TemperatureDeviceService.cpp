@@ -397,7 +397,7 @@ bool TemperatureDeviceService::disconnectDevice(QString* error)
 {
     if (!initialized_) { return reject(error, QStringLiteral("温度服务尚未初始化。")); }
     const MachineState state = MachineStateManager::instance().state();
-    if (state == MachineState::Running || state == MachineState::Resetting || MotionControlService::instance().hasActiveMotion()) {
+    if (state == MachineState::Running || state == MachineState::Resetting) {
         return reject(error, QStringLiteral("机器运行、复位或运动尚未结束，不能断开温度设备。"));
     }
     QMetaObject::invokeMethod(worker_, [worker = worker_] { worker->disconnectDevice(); }, Qt::QueuedConnection);

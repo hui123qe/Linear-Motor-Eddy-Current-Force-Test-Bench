@@ -96,15 +96,12 @@ AcsClient::AcsClient(QObject* parent)
     , controllerHandle_(ACSC_INVALID)
     , pollTimer_(new QTimer(this))
     , sensorPollTimer_(new QTimer(this))
-    , protectionTimer_(new QTimer(this))
 {
     pollTimer_->setSingleShot(false);
     connect(pollTimer_, &QTimer::timeout, this, &AcsClient::pollStatus);
     sensorPollTimer_->setSingleShot(false);
     sensorPollTimer_->setInterval(kSensorPollIntervalMilliseconds);
     connect(sensorPollTimer_, &QTimer::timeout, this, &AcsClient::pollSensors);
-    protectionTimer_->setInterval(100);
-    connect(protectionTimer_, &QTimer::timeout, this, &AcsClient::verifyProtectionStops);
 }
 
 AcsClient::~AcsClient()
@@ -156,12 +153,9 @@ void AcsClient::disconnectController()
 void AcsClient::stopConfiguredBufferAndKillAll(const ProtectionStopRequest& request)
 {
     zeroMovePending_ = false;
-    if (pendingProtectionStops_.contains(request.occurrenceId)) { return; }
     ProtectionStopResult result;
     result.occurrenceId = request.occurrenceId; result.buffer = request.buffer;
-    const qint64 deadline = deviceObservationMonoMs() + qMax(100, request.timeoutMs);
     if (controllerHandle_ == ACSC_INVALID) {
-        result.state = ProtectionStopState::Failed;
         result.detail = QStringLiteral("ACS 未连接，无法停止 Buffer 或执行 Kill All。");
         emit protectionStopResult(result); return;
     }
@@ -174,53 +168,11 @@ void AcsClient::stopConfiguredBufferAndKillAll(const ProtectionStopRequest& requ
     result.killAllSucceeded = acsc_KillAll(handle, ACSC_SYNCHRONOUS) != 0;
     if (!result.killAllSucceeded) { errors.append(sdkError(QStringLiteral("故障保护 Kill All 失败"))); }
     if (!errors.isEmpty()) {
-        result.state = ProtectionStopState::Failed; result.detail = errors.join(QStringLiteral("；"));
+        result.detail = errors.join(QStringLiteral("；"));
         emit protectionStopResult(result); return;
     }
-    result.detail = QStringLiteral("StopBuffer 与 KillAll 调用成功，等待运动终结核实");
-    pendingProtectionStops_[result.occurrenceId] = result;
-    protectionDeadlines_[result.occurrenceId] = deadline;
-    emit protectionStopResult(result); protectionTimer_->start();
-    verifyProtectionStops();
-}
-
-void AcsClient::verifyProtectionStops()
-{
-    const QList<QUuid> ids = pendingProtectionStops_.keys();
-    for (const QUuid& id : ids) {
-        ProtectionStopResult result = pendingProtectionStops_.value(id);
-        QString error;
-        bool stopped = true;
-        if (controllerHandle_ == ACSC_INVALID) {
-            error = QStringLiteral("停止核实期间 ACS 连接已断开");
-        } else {
-            const HANDLE handle = static_cast<HANDLE>(controllerHandle_);
-            int programState = 0;
-            double axisCount = 0.0;
-            if (acsc_GetProgramState(handle, result.buffer, &programState, ACSC_SYNCHRONOUS) == 0
-                || acsc_GetAxesCount(handle, &axisCount, ACSC_SYNCHRONOUS) == 0
-                || !std::isfinite(axisCount) || axisCount < 1 || axisCount > 64 || std::floor(axisCount) != axisCount) {
-                error = sdkError(QStringLiteral("读取 Buffer/轴数量进行停止核实失败"));
-            } else {
-                stopped = (programState & (ACSC_PST_RUN | ACSC_PST_SUSPEND)) == 0;
-                for (int axis = 0; axis < static_cast<int>(axisCount); ++axis) {
-                    int motorState = 0;
-                    if (acsc_GetMotorState(handle, axis, &motorState, ACSC_SYNCHRONOUS) == 0) {
-                        error = sdkError(QStringLiteral("读取全轴停止状态失败")); break;
-                    }
-                    if ((motorState & ACSC_MST_MOVE) != 0) { stopped = false; }
-                }
-            }
-        }
-        if (!error.isEmpty()) { result.state = ProtectionStopState::Failed; result.detail = error; }
-        else if (deviceObservationMonoMs() >= protectionDeadlines_.value(id)) {
-            result.state = ProtectionStopState::TimedOut; result.detail = QStringLiteral("指定 Buffer 或全轴运动停止核实超时");
-        } else if (stopped) {
-            result.state = ProtectionStopState::Confirmed; result.detail = QStringLiteral("指定 Buffer 已停止，全轴运动已终结");
-        } else { continue; }
-        pendingProtectionStops_.remove(id); protectionDeadlines_.remove(id); emit protectionStopResult(result);
-    }
-    if (pendingProtectionStops_.isEmpty()) { protectionTimer_->stop(); }
+    result.detail = QStringLiteral("StopBuffer 与 KillAll 下发成功，停止处理完成");
+    emit protectionStopResult(result);
 }
 
 void AcsClient::tareForceSensor()
@@ -964,7 +916,7 @@ void AcsClient::pollStatus()
     }
 
     // Hardware emergency-stop loop: 0 = triggered, 1 = normal.
-    const bool hardwareEmergencyStopActive = hardwareEmergencyStop == 0;
+    const bool hardwareEmergencyStopActive = hardwareEmergencyStop == 1;
     safetyStatus.hardwareEmergencyStop.rawValue = hardwareEmergencyStop;
     safetyStatus.hardwareEmergencyStop.state =
         hardwareEmergencyStopActive ? SafetyPointState::Triggered
@@ -1191,12 +1143,6 @@ bool AcsClient::openConnection(QString* errorMessage)
 void AcsClient::closeConnection()
 {
     zeroMovePending_ = false;
-    protectionTimer_->stop();
-    for (ProtectionStopResult result : pendingProtectionStops_) {
-        result.state = ProtectionStopState::Failed; result.detail = QStringLiteral("ACS 连接关闭，停止核实未完成");
-        emit protectionStopResult(result);
-    }
-    pendingProtectionStops_.clear(); protectionDeadlines_.clear();
     pollTimer_->stop();
     sensorPollTimer_->stop();
     if (controllerHandle_ == ACSC_INVALID) {

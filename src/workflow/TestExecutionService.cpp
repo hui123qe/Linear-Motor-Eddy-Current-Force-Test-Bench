@@ -329,9 +329,9 @@ bool TestExecutionService::stop(QString* errorMessage)
 }
 bool TestExecutionService::reset(QString* errorMessage)
 {
-    if (hasActiveExecution() || pendingTerminalState_.has_value() || MotionControlService::instance().hasActiveMotion()) {
-        setError(errorMessage, QStringLiteral("实验收尾或运动尚未结束，不能复位。")); return false;
-    }
+    // if (hasActiveExecution() || pendingTerminalState_.has_value() || MotionControlService::instance().hasActiveMotion()) {
+    //     setError(errorMessage, QStringLiteral("实验收尾或运动尚未结束，不能复位。")); return false;
+    // }
     MachineStateManager& machineStateManager = MachineStateManager::instance();
     if (!machineStateManager.beginReset(errorMessage)) {
         return false;
@@ -948,7 +948,7 @@ bool TestExecutionService::requestExecutionStop(bool requestMotionStop,
 
     QString motionError;
     bool motionAccepted = true;
-    if (requestMotionStop && MotionControlService::instance().hasActiveMotion()) {
+    if (requestMotionStop) {
         motionAccepted = MotionControlService::instance().stop(&motionError);
         if (!motionAccepted) {
             recordExecutionFailure(

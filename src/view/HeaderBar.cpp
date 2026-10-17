@@ -67,7 +67,7 @@ void HeaderBar::handleEmergencyStopCompleted()
     QMessageBox::warning(
         this,
         QStringLiteral("软件急停"),
-        QStringLiteral("指定 Buffer 已停止，Kill All 已执行，全轴运动已终结。"));
+        QStringLiteral("StopBuffer 与 KillAll 下发成功，软件急停完成。"));
 }
 
 void HeaderBar::handleEmergencyStopFailed(const QString& message)
