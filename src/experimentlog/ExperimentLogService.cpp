@@ -450,6 +450,7 @@ void ExperimentLogService::tryStoreSummary(qint64 executionId)
     summary.finishedAtUtc = group.finalContext.finishedAtUtc;
     summary.operatorName = group.finalContext.operatorName;
     summary.state = group.finalContext.state;
+    summary.targets = group.finalContext.targets;
 
     QVector<ExperimentStatistics> includedStatistics;
     for (QMap<int, ExperimentRecord>::const_iterator recordIterator =

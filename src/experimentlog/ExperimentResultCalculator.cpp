@@ -11,6 +11,22 @@ bool hasFiniteValue(const std::optional<double>& value)
 
 } // namespace
 
+std::optional<TestResultComparison> ExperimentResultCalculator::compareSummary(
+    const ExperimentSummaryRecord& summary)
+{
+    if (summary.state != ExperimentTerminalState::Completed
+        || !summary.targets.has_value()
+        || !hasFiniteValue(summary.statistics.multipleAverageForceNewtons)
+        || !hasFiniteValue(summary.statistics.multipleAverageForceCoefficientNewtonSecondsPerMeter)) {
+        return std::nullopt;
+    }
+    ActualTestResult actual;
+    actual.averageForceNewtons = *summary.statistics.multipleAverageForceNewtons;
+    actual.forceCoefficientNewtonSecondsPerMeter =
+        *summary.statistics.multipleAverageForceCoefficientNewtonSecondsPerMeter;
+    return compareTestResult(*summary.targets, actual);
+}
+
 ExperimentStatistics ExperimentResultCalculator::calculateSingle(
     const ExperimentForceAggregate& aggregate,
     double testSpeedMetersPerSecond)

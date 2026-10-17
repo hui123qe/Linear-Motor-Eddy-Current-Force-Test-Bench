@@ -35,6 +35,7 @@ public:
     void start(bool startScrolling);
     void setCurveName(const QString& curveId, const QString& displayName);
     void setCurveVisible(const QString& curveId, bool visible);
+    void setInteractionEnabled(bool enabled);
     void setXAxisMode(ChartXAxisMode mode);
     void setAxisLabels(const QString& xAxisLabel, const QString& yAxisLabel);
     void setLegendVisible(bool visible);

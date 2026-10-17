@@ -965,8 +965,8 @@ public:
         summaryQuery.prepare(QStringLiteral(
             "INSERT INTO %1 (execution_id,base_experiment_name,finished_at,"
             "operator_name,summary_state,multiple_average_force_n,"
-            "multiple_average_force_coefficient_n_s_m) "
-            "VALUES (?,?,?,NULLIF(?,''),?,?,?) "
+            "multiple_average_force_coefficient_n_s_m,result_targets) "
+            "VALUES (?,?,?,NULLIF(?,''),?,?,?,CAST(? AS JSONB)) "
             "ON CONFLICT (execution_id) DO NOTHING RETURNING id")
                                  .arg(summariesTable));
         summaryQuery.addBindValue(summary.executionId);
@@ -979,6 +979,10 @@ public:
         summaryQuery.addBindValue(nullableDouble(
             summary.statistics
                 .multipleAverageForceCoefficientNewtonSecondsPerMeter));
+        summaryQuery.addBindValue(summary.targets.has_value()
+            ? QVariant(QString::fromUtf8(QJsonDocument(testResultTargetsToJson(*summary.targets))
+                                            .toJson(QJsonDocument::Compact)))
+            : QVariant());
         if (!summaryQuery.exec()) {
             fail(sqlErrorMessage(QStringLiteral("保存实验汇总记录失败"),
                                  summaryQuery.lastError()));
@@ -1136,7 +1140,7 @@ public:
         summaryQuery.prepare(QStringLiteral(
             "SELECT s.id,s.execution_id,s.base_experiment_name,s.finished_at,"
             "s.operator_name,s.summary_state,s.multiple_average_force_n,"
-            "s.multiple_average_force_coefficient_n_s_m "
+            "s.multiple_average_force_coefficient_n_s_m,s.result_targets "
             "FROM %1 s WHERE s.id = ?")
                                  .arg(summariesTable));
         summaryQuery.addBindValue(summaryId);
@@ -1169,6 +1173,16 @@ public:
             summary.statistics
                 .multipleAverageForceCoefficientNewtonSecondsPerMeter =
                 summaryQuery.value(7).toDouble();
+        }
+
+        if (!summaryQuery.isNull(8)) {
+            const QJsonDocument document = QJsonDocument::fromJson(
+                summaryQuery.value(8).toString().toUtf8());
+            TestResultTargets targets;
+            if (!testResultTargetsFromJson(document.object(), &targets, errorMessage)) {
+                return false;
+            }
+            summary.targets = targets;
         }
 
         QSqlQuery membersQuery(database_);
@@ -1374,6 +1388,9 @@ private:
             QStringLiteral(
                 "ALTER TABLE %1 ADD COLUMN IF NOT EXISTS summary_state "
                 "TEXT NOT NULL DEFAULT 'completed'")
+                .arg(summariesTable),
+            QStringLiteral(
+                "ALTER TABLE %1 ADD COLUMN IF NOT EXISTS result_targets JSONB NULL")
                 .arg(summariesTable),
             QStringLiteral(
                 "CREATE TABLE IF NOT EXISTS %1 ("

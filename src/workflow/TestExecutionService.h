@@ -92,6 +92,7 @@ private:
         QString* errorMessage) const;
 
     TestParameters parameters_;
+    TestResultTargets resultTargets_;
     qint64 executionId_ = 0;
     QString baseExperimentName_;
     QString currentRawDataTableName_;

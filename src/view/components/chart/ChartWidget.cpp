@@ -64,6 +64,8 @@ ChartWidget::ChartWidget(QWidget* parent)
 
     initializePlot();
     initializeToolBarConnections();
+    connect(curveSelector_, &CurveSelector::curveVisibilityChanged,
+            this, &ChartWidget::setCurveVisible);
 }
 
 ChartWidget::~ChartWidget() = default;
@@ -141,6 +143,17 @@ void ChartWidget::setCurveVisible(const QString& curveId, bool visible)
 
     iterator->graph->setVisible(visible);
     curveSelector_->setCurveVisible(curveId, visible);
+    replot();
+}
+
+void ChartWidget::setInteractionEnabled(bool enabled)
+{
+    start(false);
+    toolBar_->setEnabled(enabled);
+    curveSelector_->setEnabled(enabled);
+    plot_->setEnabled(enabled);
+    hideCrosshair();
+    updateOverviewRange();
     replot();
 }
 

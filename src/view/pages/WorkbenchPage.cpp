@@ -3,6 +3,7 @@
 #include "../../acquisition/DataAcquisitionService.h"
 #include "../../database/AcquisitionDatabaseService.h"
 #include "../../experimentlog/ExperimentLogService.h"
+#include "../../experimentlog/ExperimentResultCalculator.h"
 #include "../../logging/AppLogger.h"
 #include "../../machine/MachineStateManager.h"
 #include "../../motion/MotionControlService.h"
@@ -31,10 +32,15 @@ namespace {
 
 constexpr int maximumChartPointCount = std::numeric_limits<int>::max();
 
-const QString& eddyForceCurveId()
+void setResultIndicator(QLabel* indicator, const std::optional<bool>& passed)
 {
-    static const QString curveId = QStringLiteral("eddy_force");
-    return curveId;
+    const QString color = !passed.has_value() ? QStringLiteral("#94a3b8")
+        : *passed ? QStringLiteral("#16a34a") : QStringLiteral("#dc2626");
+    indicator->setText(!passed.has_value() ? QStringLiteral("待测")
+        : *passed ? QStringLiteral("合格") : QStringLiteral("不合格"));
+    indicator->setStyleSheet(QStringLiteral(
+        "QLabel { background: %1; color: white; border-radius: 26px; font-weight: 600; }")
+                                .arg(color));
 }
 
 QString testTypeText(EddyCurrentTestType testType)
@@ -56,28 +62,78 @@ std::optional<TestResultTargets> requestTestResultTargets(QWidget* parent)
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout;
-    form->setHorizontalSpacing(24);
+    auto* form = new QGridLayout;
+    form->setHorizontalSpacing(12);
     form->setVerticalSpacing(12);
+    form->addWidget(new QLabel(QStringLiteral("目标值"), &dialog), 0, 1);
+    form->addWidget(new QLabel(QStringLiteral("允许偏差"), &dialog), 0, 3);
 
-    const TestResultTargets defaults;
+    TestResultTargets defaults;
+    QString loadError;
+    if (!TestResultService::instance().loadSavedTargets(&defaults, &loadError)) {
+        QMessageBox::warning(parent, QStringLiteral("读取测试目标失败"), loadError);
+    }
     auto* averageInput = new QDoubleSpinBox(&dialog);
     averageInput->setRange(0.001, 1000000.0);
     averageInput->setDecimals(3);
     averageInput->setValue(defaults.averageForceNewtons);
-    averageInput->setSuffix(QStringLiteral(" N"));
-    form->addRow(QStringLiteral("目标平均值"), averageInput);
+    auto* averageToleranceInput = new QDoubleSpinBox(&dialog);
+    averageToleranceInput->setRange(0.0, 1000000.0);
+    averageToleranceInput->setDecimals(3);
+    averageToleranceInput->setValue(defaults.averageForceToleranceNewtons);
+    form->addWidget(new QLabel(QStringLiteral("平均涡流力"), &dialog), 1, 0);
+    form->addWidget(averageInput, 1, 1);
+    form->addWidget(new QLabel(QStringLiteral("±"), &dialog), 1, 2);
+    form->addWidget(averageToleranceInput, 1, 3);
+    form->addWidget(new QLabel(QStringLiteral("N"), &dialog), 1, 4);
 
-    auto* fluctuationRateInput = new QDoubleSpinBox(&dialog);
-    fluctuationRateInput->setRange(0.0, 100.0);
-    fluctuationRateInput->setDecimals(2);
-    fluctuationRateInput->setValue(defaults.fluctuationRatePercent);
-    fluctuationRateInput->setSuffix(QStringLiteral(" %"));
-    form->addRow(QStringLiteral("目标波动率"), fluctuationRateInput);
+    auto* coefficientInput = new QDoubleSpinBox(&dialog);
+    coefficientInput->setRange(0.0, 1000000.0);
+    coefficientInput->setDecimals(3);
+    coefficientInput->setValue(defaults.forceCoefficientNewtonSecondsPerMeter);
+    auto* coefficientToleranceInput = new QDoubleSpinBox(&dialog);
+    coefficientToleranceInput->setRange(0.0, 1000000.0);
+    coefficientToleranceInput->setDecimals(3);
+    coefficientToleranceInput->setValue(defaults.forceCoefficientToleranceNewtonSecondsPerMeter);
+    form->addWidget(new QLabel(QStringLiteral("平均涡流力系数"), &dialog), 2, 0);
+    form->addWidget(coefficientInput, 2, 1);
+    form->addWidget(new QLabel(QStringLiteral("±"), &dialog), 2, 2);
+    form->addWidget(coefficientToleranceInput, 2, 3);
+    form->addWidget(new QLabel(QStringLiteral("N·s/m"), &dialog), 2, 4);
+    for (QDoubleSpinBox* input : {averageInput, coefficientInput,
+                                  averageToleranceInput, coefficientToleranceInput}) {
+        input->setFixedWidth(170);
+        input->setMinimumHeight(36);
+        input->setAlignment(Qt::AlignRight);
+        const bool tolerance = input == averageToleranceInput || input == coefficientToleranceInput;
+        input->setStyleSheet(tolerance
+            ? QStringLiteral("QDoubleSpinBox { background: #f3f4f6; color: #64748b; }")
+            : QStringLiteral("QDoubleSpinBox { background: #eff6ff; color: #1e40af; font-weight: 600; }"));
+    }
     layout->addLayout(form);
 
+    const auto readTargets = [&] {
+        TestResultTargets targets;
+        targets.averageForceNewtons = averageInput->value();
+        targets.averageForceToleranceNewtons = averageToleranceInput->value();
+        targets.forceCoefficientNewtonSecondsPerMeter = coefficientInput->value();
+        targets.forceCoefficientToleranceNewtonSecondsPerMeter = coefficientToleranceInput->value();
+        return targets;
+    };
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QPushButton* saveButton = buttons->addButton(
+        QStringLiteral("保存"), QDialogButtonBox::ActionRole);
+    saveButton->setAutoDefault(false);
+    QObject::connect(saveButton, &QPushButton::clicked, &dialog, [&] {
+        QString saveError;
+        if (!TestResultService::instance().saveTargets(readTargets(), &saveError)) {
+            QMessageBox::warning(&dialog, QStringLiteral("保存测试目标失败"), saveError);
+            return;
+        }
+        QMessageBox::information(&dialog, QStringLiteral("保存测试目标"),
+                                 QStringLiteral("已保存，下次打开时自动读取。"));
+    });
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
@@ -86,20 +142,7 @@ std::optional<TestResultTargets> requestTestResultTargets(QWidget* parent)
         return std::nullopt;
     }
 
-    TestResultTargets targets;
-    targets.averageForceNewtons = averageInput->value();
-    targets.fluctuationRatePercent = fluctuationRateInput->value();
-    return targets;
-}
-
-QString forceText(double value)
-{
-    return QStringLiteral("%1 N").arg(value, 0, 'f', 2);
-}
-
-QString rateText(double value)
-{
-    return QStringLiteral("%1 %").arg(value, 0, 'f', 2);
+    return readTargets();
 }
 
 QString motionStateText(int state, int errorCode)
@@ -202,21 +245,17 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
     primaryRow->setSpacing(12);
 
     auto* curvePanel = ViewHelpers::makePanel(
-        QStringLiteral("实时曲线"),
-        QStringLiteral("显示当前单次正向或反向实验的位移—涡流力关系"));
+        QStringLiteral("测试曲线"),
+        QStringLiteral("各次正反向曲线同屏显示，整组结束后可缩放查看"));
     curvePanel->setObjectName(QStringLiteral("curvePanel"));
     auto* curveLayout = qobject_cast<QVBoxLayout*>(curvePanel->layout());
     chartWidget_ = new ChartWidget(curvePanel);
     chartWidget_->setXAxisMode(ChartXAxisMode::Numeric);
+    chartWidget_->setLegendVisible(false);
     chartWidget_->setAxisLabels(QStringLiteral("位移 / m"),
                                 QStringLiteral("涡流力 / N"));
 
-    ChartCurveConfig forceCurve;
-    forceCurve.id = eddyForceCurveId();
-    forceCurve.displayName = QStringLiteral("涡流力");
-    forceCurve.color = QColor(QStringLiteral("#1f78d1"));
-    forceCurve.maximumPointCount = maximumChartPointCount;
-    chartWidget_->addCurve(forceCurve);
+    chartWidget_->setInteractionEnabled(false);
     curveLayout->addWidget(chartWidget_, 1);
     primaryRow->addWidget(curvePanel, 5);
 
@@ -315,7 +354,21 @@ void WorkbenchPage::initializeLowerArea(QVBoxLayout* pageLayout)
         QStringLiteral("多次平均涡流力系数"), QStringLiteral("----"));
     finalResultGrid->addWidget(multipleAverageForceCard_, 0, 0);
     finalResultGrid->addWidget(multipleAverageForceCoefficientCard_, 1, 0);
+    forceResultIndicator_ = new QLabel;
+    coefficientResultIndicator_ = new QLabel;
+    for (QLabel* indicator : {forceResultIndicator_, coefficientResultIndicator_}) {
+        indicator->setFixedSize(52, 52);
+        indicator->setAlignment(Qt::AlignCenter);
+        setResultIndicator(indicator, std::nullopt);
+    }
+    finalResultGrid->addWidget(forceResultIndicator_, 0, 1);
+    finalResultGrid->addWidget(coefficientResultIndicator_, 1, 1);
+    finalResultGrid->setColumnStretch(0, 1);
     finalResultLayout->addLayout(finalResultGrid);
+    targetComparisonLabel_ = ViewHelpers::makeLabel(
+        QStringLiteral("目标判定：待测试"), "fieldLabel");
+    targetComparisonLabel_->setWordWrap(true);
+    finalResultLayout->addWidget(targetComparisonLabel_);
     finalResultLayout->addStretch();
     resultColumns->addWidget(finalResultPanel, 1);
 
@@ -410,10 +463,6 @@ void WorkbenchPage::initializeConnections()
             &DataAcquisitionService::collectionStarted,
             this,
             &WorkbenchPage::beginChartCollection);
-    connect(&dataAcquisitionService,
-            &DataAcquisitionService::collectionStopped,
-            this,
-            &WorkbenchPage::commitChartCollection);
     AcquisitionDatabaseService& databaseService =
         AcquisitionDatabaseService::instance();
     connect(&databaseService,
@@ -432,6 +481,14 @@ void WorkbenchPage::initializeConnections()
             &WorkbenchPage::updateMachineStateDisplay);
     TestExecutionService& executionService = TestExecutionService::instance();
     connect(&executionService,
+            &TestExecutionService::experimentFinalized,
+            this,
+            &WorkbenchPage::commitChartCollection);
+    connect(&executionService,
+            &TestExecutionService::experimentGroupFinalized,
+            this,
+            &WorkbenchPage::finishChartCollection);
+    connect(&executionService,
             &TestExecutionService::chartSamplesReady,
             this,
             &WorkbenchPage::appendForcePositionSamples);
@@ -440,6 +497,7 @@ void WorkbenchPage::initializeConnections()
             this,
             [this](qint64 executionId, const QString&) {
                 activeExecutionId_ = executionId;
+                clearChartData();
                 qCInfo(logCompletionReceipt)
                     << "[工作台][执行上下文] 设置 activeExecutionId"
                     << "executionId=" << activeExecutionId_;
@@ -581,7 +639,6 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
     if (!connected) {
         currentStateValue_->setText(QStringLiteral("ACS 未连接"));
         displacementCard_->setValue(QStringLiteral("-- mm"));
-        chartWidget_->start(false);
         return;
     }
 
@@ -591,7 +648,6 @@ void WorkbenchPage::setControllerConnected(bool connected, const QString& messag
 void WorkbenchPage::setMotionState(int state, int errorCode)
 {
     currentStateValue_->setText(motionStateText(state, errorCode));
-    chartWidget_->start(state == 50 || state == 70);
 }
 
 void WorkbenchPage::setHomeRunning(bool running)
@@ -636,7 +692,6 @@ void WorkbenchPage::updateMachineStateDisplay(
 
 void WorkbenchPage::beginTest(const TestResultTargets& targets)
 {
-    clearChartData();
     QString errorMessage;
     if (!TestExecutionService::instance().start(targets, &errorMessage)) {
         QMessageBox::warning(
@@ -672,22 +727,44 @@ void WorkbenchPage::beginChartCollection()
     chartCollectionActive_ = true;
 }
 
-void WorkbenchPage::commitChartCollection()
+void WorkbenchPage::commitChartCollection(const ExperimentFinalContext& context)
 {
     if (!chartCollectionActive_) {
         return;
     }
 
     chartCollectionActive_ = false;
-    chartWidget_->replacePoints(eddyForceCurveId(), pendingChartSamples_);
+
+    ChartCurveConfig curve;
+    curve.id = QStringLiteral("eddy_force_%1").arg(context.repetitionIndex);
+    curve.displayName = QStringLiteral("第 %1 次·%2")
+                            .arg(context.cycleIndex)
+                            .arg(experimentMotionDirectionDisplayText(context.direction));
+    curve.color = context.direction == ExperimentMotionDirection::Forward
+        ? QColor(QStringLiteral("#1f78d1"))
+        : QColor(QStringLiteral("#e67e22"));
+    curve.maximumPointCount = maximumChartPointCount;
+    chartWidget_->addCurve(curve);
+    chartCurveIds_.append(curve.id);
+    chartWidget_->replacePoints(curve.id, pendingChartSamples_);
     pendingChartSamples_.clear();
+}
+
+void WorkbenchPage::finishChartCollection()
+{
+    chartCollectionActive_ = false;
+    chartWidget_->setInteractionEnabled(true);
 }
 
 void WorkbenchPage::clearChartData()
 {
     chartCollectionActive_ = false;
     pendingChartSamples_.clear();
-    chartWidget_->clearCurve(eddyForceCurveId());
+    for (const QString& curveId : chartCurveIds_) {
+        chartWidget_->removeCurve(curveId);
+    }
+    chartCurveIds_.clear();
+    chartWidget_->setInteractionEnabled(false);
 }
 
 void WorkbenchPage::clearResults()
@@ -699,6 +776,9 @@ void WorkbenchPage::clearResults()
     fluctuationRateCard_->setValue(QStringLiteral("----"));
     multipleAverageForceCard_->setValue(QStringLiteral("----"));
     multipleAverageForceCoefficientCard_->setValue(QStringLiteral("----"));
+    targetComparisonLabel_->setText(QStringLiteral("目标判定：待测试"));
+    setResultIndicator(forceResultIndicator_, std::nullopt);
+    setResultIndicator(coefficientResultIndicator_, std::nullopt);
 }
 
 void WorkbenchPage::setExperimentRecord(const ExperimentRecord& record)
@@ -761,6 +841,15 @@ void WorkbenchPage::setExperimentSummary(
         formatForceCoefficient(
             summary.statistics
                 .multipleAverageForceCoefficientNewtonSecondsPerMeter));
+    const std::optional<TestResultComparison> comparison =
+        ExperimentResultCalculator::compareSummary(summary);
+    if (comparison.has_value()) {
+        setResultComparison(*comparison);
+    } else {
+        targetComparisonLabel_->setText(QStringLiteral("目标判定：未完成或无有效结果"));
+        setResultIndicator(forceResultIndicator_, std::nullopt);
+        setResultIndicator(coefficientResultIndicator_, std::nullopt);
+    }
     qCInfo(logCompletionReceipt)
         << "[工作台][整组 UI 更新] 已更新最终实验结果卡片"
         << "executionId=" << summary.executionId
@@ -769,7 +858,15 @@ void WorkbenchPage::setExperimentSummary(
 
 void WorkbenchPage::setResultComparison(const TestResultComparison& comparison)
 {
-    averageForceCard_->setValue(forceText(comparison.actual.averageForceNewtons));
-    forceRangeCard_->setValue(forceText(comparison.actual.forceRangeNewtons));
-    fluctuationRateCard_->setValue(rateText(comparison.actualFluctuationRatePercent));
+    setResultIndicator(forceResultIndicator_, comparison.averageForcePassed);
+    setResultIndicator(coefficientResultIndicator_, comparison.forceCoefficientPassed);
+    targetComparisonLabel_->setText(
+        QStringLiteral("平均涡流力：%1（目标 %2 ± %3 N）\n"
+                       "平均涡流力系数：%4（目标 %5 ± %6 N·s/m）")
+            .arg(comparison.averageForcePassed ? QStringLiteral("合格") : QStringLiteral("不合格"))
+            .arg(comparison.targets.averageForceNewtons, 0, 'f', 3)
+            .arg(comparison.targets.averageForceToleranceNewtons, 0, 'f', 3)
+            .arg(comparison.forceCoefficientPassed ? QStringLiteral("合格") : QStringLiteral("不合格"))
+            .arg(comparison.targets.forceCoefficientNewtonSecondsPerMeter, 0, 'f', 3)
+            .arg(comparison.targets.forceCoefficientToleranceNewtonSecondsPerMeter, 0, 'f', 3));
 }

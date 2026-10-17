@@ -289,6 +289,7 @@ bool TestExecutionService::start(const TestResultTargets& resultTargets,
 
     parameters_ = *lockedConfiguration;
     pendingResultTargets_ = resultTargets;
+    resultTargets_ = resultTargets;
     executionId_ = nextExecutionId();
     baseExperimentName_ = experimentBaseName(parameters_)
                           + QLatin1Char('-')
@@ -791,6 +792,7 @@ void TestExecutionService::finalizeExecutionGroup(
     }
 
     ExperimentGroupFinalContext context;
+    context.targets = resultTargets_;
     context.executionId = executionId_;
     context.baseExperimentName = baseExperimentName_;
     context.finishedAtUtc = QDateTime::currentDateTimeUtc();

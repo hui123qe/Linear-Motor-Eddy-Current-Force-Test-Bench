@@ -4,6 +4,7 @@
 #include "../../result/TestResultService.h"
 
 #include <QPointF>
+#include <QStringList>
 #include <QVector>
 #include <QWidget>
 
@@ -14,6 +15,7 @@ class QPushButton;
 class StatusPill;
 class QVBoxLayout;
 struct ExperimentRecord;
+struct ExperimentFinalContext;
 struct ExperimentSummaryRecord;
 enum class MachineState;
 
@@ -45,7 +47,8 @@ private slots:
     void onHomeButtonClicked();
     void onResetButtonClicked();
     void beginChartCollection();
-    void commitChartCollection();
+    void commitChartCollection(const ExperimentFinalContext& context);
+    void finishChartCollection();
 
 private:
     void initializePageHeader(QVBoxLayout* pageLayout);
@@ -66,6 +69,9 @@ private:
     MetricCard* multipleAverageForceCard_ = nullptr;
     MetricCard* multipleAverageForceCoefficientCard_ = nullptr;
     QLabel* latestRecordLabel_ = nullptr;
+    QLabel* targetComparisonLabel_ = nullptr;
+    QLabel* forceResultIndicator_ = nullptr;
+    QLabel* coefficientResultIndicator_ = nullptr;
     ChartWidget* chartWidget_ = nullptr;
     StatusPill* configurationStatus_ = nullptr;
     QLabel* currentStateValue_ = nullptr;
@@ -77,4 +83,5 @@ private:
     bool chartCollectionActive_ = false;
     qint64 activeExecutionId_ = 0;
     QVector<QPointF> pendingChartSamples_;
+    QStringList chartCurveIds_;
 };

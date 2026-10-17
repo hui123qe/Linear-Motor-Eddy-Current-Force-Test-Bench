@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../config/TestParameters.h"
+#include "../result/TestResultService.h"
 
 #include <QDateTime>
 #include <QDate>
@@ -65,6 +66,7 @@ struct ExperimentSummaryRecord
     QString operatorName;
     ExperimentTerminalState state = ExperimentTerminalState::Fault;
     ExperimentSummaryStatistics statistics;
+    std::optional<TestResultTargets> targets;
 };
 
 struct ExperimentFinalContext
@@ -87,6 +89,7 @@ struct ExperimentFinalContext
 
 struct ExperimentGroupFinalContext
 {
+    TestResultTargets targets;
     qint64 executionId = 0;
     QString baseExperimentName;
     QDateTime finishedAtUtc;

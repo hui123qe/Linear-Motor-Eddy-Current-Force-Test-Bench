@@ -1,4 +1,5 @@
 #include "ExperimentExportService.h"
+#include "ExperimentResultCalculator.h"
 
 #include "../database/AcquisitionDatabaseService.h"
 #include "../logging/AppLogger.h"
@@ -354,6 +355,56 @@ private:
             kExperimentCoefficientDisplayDecimals);
         document_->setColumnWidth(1, 30.0);
         document_->setColumnWidth(2, 48.0);
+
+        row += 2;
+        const QStringList headers = {
+            QStringLiteral("判定指标"), QStringLiteral("目标值"),
+            QStringLiteral("容差（±）"), QStringLiteral("下限（含）"),
+            QStringLiteral("上限（含）"), QStringLiteral("实际值"),
+            QStringLiteral("判定结果")
+        };
+        for (int column = 0; column < headers.size(); ++column) {
+            document_->write(row, column + 1, headers.at(column), heading);
+        }
+        ++row;
+        const std::optional<TestResultComparison> comparison =
+            ExperimentResultCalculator::compareSummary(summary);
+        const TestResultTargets targets = summary.targets.value_or(TestResultTargets{});
+        const auto writeTargetRow = [&](const QString& label, double target, double tolerance,
+                                       const std::optional<double>& actual,
+                                       const std::optional<bool>& passed) {
+            document_->write(row, 1, label);
+            if (summary.targets.has_value()) {
+                writeOptional(document_.get(), row, 2, target, 3);
+                writeOptional(document_.get(), row, 3, tolerance, 3);
+                writeOptional(document_.get(), row, 4, target - tolerance, 3);
+                writeOptional(document_.get(), row, 5, target + tolerance, 3);
+            } else {
+                for (int column = 2; column <= 5; ++column) {
+                    document_->write(row, column, QStringLiteral("未设置"));
+                }
+            }
+            writeOptional(document_.get(), row, 6, actual, 3);
+            QXlsx::Format resultFormat;
+            resultFormat.setFontColor(QColor(!passed.has_value() ? QStringLiteral("#64748b")
+                : *passed ? QStringLiteral("#16a34a") : QStringLiteral("#dc2626")));
+            document_->write(row, 7,
+                !passed.has_value() ? QStringLiteral("未判定")
+                    : *passed ? QStringLiteral("合格") : QStringLiteral("不合格"), resultFormat);
+            ++row;
+        };
+        writeTargetRow(QStringLiteral("平均涡流力 (N)"), targets.averageForceNewtons,
+                       targets.averageForceToleranceNewtons,
+                       summary.statistics.multipleAverageForceNewtons,
+                       comparison ? std::optional<bool>(comparison->averageForcePassed) : std::nullopt);
+        writeTargetRow(QStringLiteral("平均涡流力系数 (N·s/m)"),
+                       targets.forceCoefficientNewtonSecondsPerMeter,
+                       targets.forceCoefficientToleranceNewtonSecondsPerMeter,
+                       summary.statistics.multipleAverageForceCoefficientNewtonSecondsPerMeter,
+                       comparison ? std::optional<bool>(comparison->forceCoefficientPassed) : std::nullopt);
+        for (int column = 3; column <= 7; ++column) {
+            document_->setColumnWidth(column, 18.0);
+        }
 
         qCInfo(logExport).noquote()
             << "[导出][工作簿初始化]"

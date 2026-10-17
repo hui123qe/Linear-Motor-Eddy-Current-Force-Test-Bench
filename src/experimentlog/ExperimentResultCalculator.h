@@ -5,6 +5,8 @@
 class ExperimentResultCalculator final
 {
 public:
+    [[nodiscard]] static std::optional<TestResultComparison> compareSummary(
+        const ExperimentSummaryRecord& summary);
     [[nodiscard]] static ExperimentStatistics calculateSingle(
         const ExperimentForceAggregate& aggregate,
         double testSpeedMetersPerSecond);
