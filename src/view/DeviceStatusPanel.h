@@ -24,14 +24,10 @@ class DeviceStatusPanel final : public QWidget
 public:
     explicit DeviceStatusPanel(QWidget* parent = nullptr);
 
-signals:
-    void messageRequested(const QString& message);
-
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
-    void onInspectButtonClicked();
     void updateAcsConnectionDisplay(bool connected, const QString&);
     void updateSensorReadings(const AcsSensorReadings& readings);
     void updateSafetyStatusDisplay(const SafetyStatusSnapshot& status);

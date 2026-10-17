@@ -308,13 +308,6 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
 
     scroll->setWidget(content);
     outer->addWidget(scroll, 1);
-
-    auto* inspect = ViewHelpers::makeButton(QStringLiteral("执行设备自检"));
-    connect(inspect,
-            &QPushButton::clicked,
-            this,
-            &DeviceStatusPanel::onInspectButtonClicked);
-    outer->addWidget(inspect);
 }
 
 bool DeviceStatusPanel::eventFilter(QObject* watched, QEvent* event)
@@ -417,16 +410,6 @@ void DeviceStatusPanel::showTemperatureDialog()
         if (!service.disconnectDevice(&error)) { QMessageBox::warning(&dialog, QStringLiteral("温度连接"), error); }
     });
     dialog.exec();
-}
-
-void DeviceStatusPanel::onInspectButtonClicked()
-{
-    emit messageRequested(QStringLiteral("ACS：%1；安全回路：%2；温度设备：%3")
-        .arg(acsConnected_ ? QStringLiteral("已连接") : QStringLiteral("未连接"),
-             SafetyMonitor::instance().state() == SafetyState::Normal
-                 ? QStringLiteral("正常") : (SafetyMonitor::instance().state() == SafetyState::Triggered
-                     ? QStringLiteral("已触发") : QStringLiteral("未知")),
-             TemperatureDeviceService::instance().connectionDetail()));
 }
 
 void DeviceStatusPanel::updateAcsConnectionDisplay(
