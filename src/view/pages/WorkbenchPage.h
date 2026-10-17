@@ -3,8 +3,8 @@
 #include "../../config/TestParameters.h"
 #include "../../result/TestResultService.h"
 
+#include <QMap>
 #include <QPointF>
-#include <QStringList>
 #include <QVector>
 #include <QWidget>
 
@@ -83,5 +83,5 @@ private:
     bool chartCollectionActive_ = false;
     qint64 activeExecutionId_ = 0;
     QVector<QPointF> pendingChartSamples_;
-    QStringList chartCurveIds_;
+    QMap<QString, QVector<QPointF>> chartCurveSamples_;
 };

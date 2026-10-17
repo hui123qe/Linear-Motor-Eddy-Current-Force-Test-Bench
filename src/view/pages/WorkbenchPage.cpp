@@ -25,6 +25,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <optional>
 
@@ -246,7 +248,7 @@ void WorkbenchPage::initializePrimaryArea(QVBoxLayout* pageLayout)
 
     auto* curvePanel = ViewHelpers::makePanel(
         QStringLiteral("测试曲线"),
-        QStringLiteral("各次正反向曲线同屏显示，整组结束后可缩放查看"));
+        QStringLiteral("每次单独显示采集区间内的曲线，整组结束后按力值绝对值叠加显示"));
     curvePanel->setObjectName(QStringLiteral("curvePanel"));
     auto* curveLayout = qobject_cast<QVBoxLayout*>(curvePanel->layout());
     chartWidget_ = new ChartWidget(curvePanel);
@@ -735,6 +737,19 @@ void WorkbenchPage::commitChartCollection(const ExperimentFinalContext& context)
 
     chartCollectionActive_ = false;
 
+    const TestMotionParameters motionParameters =
+        selectedTestMotionParameters(context.parametersSnapshot);
+    const double startMeters = std::min(motionParameters.acquisitionStartMeters,
+                                       motionParameters.acquisitionEndMeters);
+    const double endMeters = std::max(motionParameters.acquisitionStartMeters,
+                                     motionParameters.acquisitionEndMeters);
+    QVector<QPointF> intervalSamples;
+    for (const QPointF& sample : pendingChartSamples_) {
+        if (sample.x() >= startMeters && sample.x() <= endMeters) {
+            intervalSamples.append(sample);
+        }
+    }
+
     ChartCurveConfig curve;
     curve.id = QStringLiteral("eddy_force_%1").arg(context.repetitionIndex);
     curve.displayName = QStringLiteral("第 %1 次·%2")
@@ -744,15 +759,28 @@ void WorkbenchPage::commitChartCollection(const ExperimentFinalContext& context)
         ? QColor(QStringLiteral("#1f78d1"))
         : QColor(QStringLiteral("#e67e22"));
     curve.maximumPointCount = maximumChartPointCount;
+    for (auto iterator = chartCurveSamples_.cbegin();
+         iterator != chartCurveSamples_.cend(); ++iterator) {
+        chartWidget_->setCurveVisible(iterator.key(), false);
+    }
     chartWidget_->addCurve(curve);
-    chartCurveIds_.append(curve.id);
-    chartWidget_->replacePoints(curve.id, pendingChartSamples_);
+    chartCurveSamples_.insert(curve.id, intervalSamples);
+    chartWidget_->replacePoints(curve.id, intervalSamples);
     pendingChartSamples_.clear();
 }
 
 void WorkbenchPage::finishChartCollection()
 {
     chartCollectionActive_ = false;
+    for (auto iterator = chartCurveSamples_.cbegin();
+         iterator != chartCurveSamples_.cend(); ++iterator) {
+        QVector<QPointF> absoluteSamples = iterator.value();
+        for (QPointF& sample : absoluteSamples) {
+            sample.setY(std::abs(sample.y()));
+        }
+        chartWidget_->replacePoints(iterator.key(), absoluteSamples);
+        chartWidget_->setCurveVisible(iterator.key(), true);
+    }
     chartWidget_->setInteractionEnabled(true);
 }
 
@@ -760,10 +788,11 @@ void WorkbenchPage::clearChartData()
 {
     chartCollectionActive_ = false;
     pendingChartSamples_.clear();
-    for (const QString& curveId : chartCurveIds_) {
-        chartWidget_->removeCurve(curveId);
+    for (auto iterator = chartCurveSamples_.cbegin();
+         iterator != chartCurveSamples_.cend(); ++iterator) {
+        chartWidget_->removeCurve(iterator.key());
     }
-    chartCurveIds_.clear();
+    chartCurveSamples_.clear();
     chartWidget_->setInteractionEnabled(false);
 }
 
