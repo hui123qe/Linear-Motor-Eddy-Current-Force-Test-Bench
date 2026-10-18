@@ -292,7 +292,7 @@ void AcsClient::resetController()
 
     const HANDLE handle = static_cast<HANDLE>(controllerHandle_);
     qCInfo(logMotion) << "复位：停止全部 ACS Buffer";
-    if (acsc_StopBuffer(handle, ACSC_BUFFER_ALL, ACSC_SYNCHRONOUS) == 0) {
+    if (acsc_StopBuffer(handle, ACSC_NONE, ACSC_SYNCHRONOUS) == 0) {
         const QString message = sdkError(QStringLiteral("复位失败：停止全部 ACS Buffer 失败。"));
         qCCritical(logMotion).noquote() << message;
         emit controllerResetFailed(message);
@@ -918,7 +918,7 @@ void AcsClient::pollStatus()
     }
 
     // Hardware emergency-stop loop: 0 = triggered, 1 = normal.
-    const bool hardwareEmergencyStopActive = hardwareEmergencyStop == 1;
+    const bool hardwareEmergencyStopActive = hardwareEmergencyStop == 0;
     safetyStatus.hardwareEmergencyStop.rawValue = hardwareEmergencyStop;
     safetyStatus.hardwareEmergencyStop.state =
         hardwareEmergencyStopActive ? SafetyPointState::Triggered
