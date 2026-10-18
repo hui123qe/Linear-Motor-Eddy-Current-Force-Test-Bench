@@ -1,5 +1,5 @@
 #/ Controller version = 4.20.01
-#/ Date = 10/16/2026 4:21 PM
+#/ Date = 10/18/2026 10:53 AM
 #/ User remarks = 
 #1
 !PNAME=IO Mapping
@@ -1256,7 +1256,7 @@ END
 
 DISABLE X
 
-WAIT 12000                 ! 测试开始：关闭自动校准
+WAIT 4000                 ! 测试开始：关闭自动校准
 ! 发出去皮信号
 EC_DOUT3.4 = 1
 EL3356_NoCal = 1                   ! 测试开始：关闭自动校准
@@ -1271,7 +1271,26 @@ ENABLE X
 
 PTP X, 0
 
+TILL MST(X).4=1
+
 STOP
+
+
+
+!!ELRO 	=	COEREAD/f(6,0x8000,0x23)
+!!ELNLOAD	=	COEREAD/f(6,0x8000,0x24)
+!!ELZB	=	COEREAD/f(6,0x8000,0x25)
+!
+!
+!COEWRITE/f(6,0x8000,0x23,ELRO)
+!COEWRITE/f(6,0x8000,0x24,ELNLOAD)
+!COEWRITE/f(6,0x8000,0x25,ELZB)
+!
+!STOP
+
+!ELFilterMODE = COEREAD/2(6,0x8000,0x11)
+!
+!STOP
 #9
 !PNAME=Balance_Mass
 !PDESC=
@@ -1308,18 +1327,6 @@ i++
 END
 
 STOP
-#10
-!PNAME=
-!PDESC=
-ELRO = COEREAD/f(6, 0X8000, 0X23)
-ELNLOAD = COEREAD/f(6, 0X8000, 0X24)
-ELZB = COEREAD/f(6, 0X8000, 0X25)
-STOP
-
-!COEWRITE/f(6, 0X8000, 0X23,ELRO)
-!COEWRITE/f(6, 0X8000, 0X24,ELNLOAD)
-!COEWRITE/f(6, 0X8000, 0X25,ELZB)
-!STOP
 #A
 !PNAME=
 !PDESC=
@@ -1569,8 +1576,9 @@ GLOBAL REAL STATIC Y3Y4_CORRECTION_MAP (47)
 
 
 global REAL RPosition_Gantry=1700     !龙门轴的运动位置
-GLOBAL REAL Home_Offset=2       !龙门轴的回零偏移量
+GLOBAL REAL Home_Offset=-2       !龙门轴的回零偏移量
 GLOBAL REAL Mass_Factor=0.15         !平衡质量因数
 GLOBAl INT Cycle_No=1                !循环次数
 
 GLOBAL REAL ELRO, ELNLOAD, ELZB
+GLOBAL INT ELFilterMODE
