@@ -274,7 +274,7 @@ QWidget* ParametersPage::createStandardSpecimenPage()
     ratedCheck_ = makeConstraintBox(
         QStringLiteral("读写限制与执行约束"),
         {QStringLiteral("最大速度：5 m/s。"),
-         QStringLiteral("最大加速度/减速度：25 m/s2。"),
+         QStringLiteral("最大加速度/减速度：26 m/s2。"),
          QStringLiteral("标准件开始位置、加减速距离和结束位置由 parameters.json 配置，界面只读。"),
          QStringLiteral("对称加减速：加速度 = 减速度 = v^2 / (2 x 加速距离)。"),
          QStringLiteral("采集位置仅保存设置，不参与运动参数约束。")},
@@ -362,7 +362,7 @@ QWidget* ParametersPage::createNonStandardSpecimenPage()
     variableCheck_ = makeConstraintBox(
         QStringLiteral("读写限制与执行约束"),
         {QStringLiteral("最大速度：5 m/s。"),
-         QStringLiteral("最大加速度/减速度：25 m/s2。"),
+         QStringLiteral("最大加速度/减速度：26 m/s2。"),
          QStringLiteral("对称加减速：加速度 = 减速度 = v^2 / (2 x 加速距离)。"),
          QStringLiteral("总行程必须不小于两倍加减速距离。"),
          QStringLiteral("采集位置仅保存设置，不参与运动参数约束。")},
