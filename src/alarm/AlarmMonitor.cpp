@@ -1,10 +1,13 @@
 #include "AlarmMonitor.h"
+#include <QLoggingCategory>
 
 #include <QSet>
 #include <cmath>
 #include <limits>
 
 namespace {
+Q_LOGGING_CATEGORY(logTemperatureMonitor, "eddy.temperature.monitor")
+
 struct ThresholdRule
 {
     TemperatureLimitParameters parameters;
@@ -183,6 +186,9 @@ void AlarmMonitor::tick()
 {
     const qint64 now = deviceObservationMonoMs();
     if (state_->temperatureUntil > 0 && now >= state_->temperatureUntil) {
+        qCWarning(logTemperatureMonitor) << "温度数据过期" << "device=" << state_->configuration.deviceId
+            << "staleAfterMs=" << state_->configuration.staleAfterMs
+            << "overdueMs=" << now - state_->temperatureUntil;
         state_->temperatureUntil = 0;
         state_->warning.invalidate(); state_->fault.invalidate();
         for (const QString& code : {QStringLiteral("TEMP_WARNING"), QStringLiteral("TEMP_FAULT")}) {

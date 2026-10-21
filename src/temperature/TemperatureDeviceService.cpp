@@ -1,11 +1,13 @@
 #include "TemperatureDeviceService.h"
 
 #include "../globh.h"
+#include "../logging/AppLogger.h"
 
 #include "../machine/MachineStateManager.h"
 #include "../motion/MotionControlService.h"
 
 #include <QTcpSocket>
+#include <QMap>
 #include <QTimer>
 #include <QtEndian>
 
@@ -49,6 +51,12 @@ protected:
         session_ = QUuid::createUuid();
         sequence_ = 0;
         peak_.reset();
+        channelErrors_.clear();
+        qCInfo(logAcquisition) << "温度采集启动" << "device=" << config.deviceId
+            << "session=" << session_ << "backend=" << config.backend
+            << "host=" << config.host << "port=" << config.port << "unitId=" << config.unitId
+            << "channels=" << config.channels << "pollMs=" << config.pollIntervalMs
+            << "timeoutMs=" << config.requestTimeoutMs << "staleMs=" << config.staleAfterMs;
         emit sessionStarted(config.deviceId, session_);
     }
     void publish(QVector<TemperatureChannelSample> channels)
@@ -61,6 +69,17 @@ protected:
         snapshot.observedMonoMs = deviceObservationMonoMs();
         snapshot.channels = std::move(channels);
         for (const TemperatureChannelSample& sample : snapshot.channels) {
+            if (sample.quality != DataQuality::Good) {
+                if (!channelErrors_.contains(sample.channel) || channelErrors_.value(sample.channel) != sample.detail) {
+                    qCWarning(logAcquisition) << "温度通道无效" << "device=" << config_.deviceId
+                        << "session=" << session_ << "sequence=" << snapshot.sequence
+                        << "channel=" << sample.channel << "reason=" << sample.detail;
+                }
+                channelErrors_.insert(sample.channel, sample.detail);
+            } else if (channelErrors_.remove(sample.channel) > 0) {
+                qCInfo(logAcquisition) << "温度通道恢复" << "device=" << config_.deviceId
+                    << "session=" << session_ << "channel=" << sample.channel << "celsius=" << sample.celsius;
+            }
             if (sample.quality == DataQuality::Good && (!peak_ || sample.celsius > *peak_)) {
                 peak_ = sample.celsius;
                 peakChannel_ = sample.channel;
@@ -83,6 +102,7 @@ protected:
     quint64 sequence_ = 0;
     std::optional<double> peak_;
     int peakChannel_ = 0;
+    QMap<int, QString> channelErrors_;
 };
 
 class SimulatedTemperatureDevice final : public TemperatureDeviceBase
@@ -119,7 +139,8 @@ private:
             const bool valid = probeValid && std::isfinite(celsius);
             complete = complete && valid;
             channels.append({channel, celsius, valid ? DataQuality::Good : DataQuality::Invalid,
-                valid ? QString() : QStringLiteral("模拟探头故障")});
+                valid ? QString() : (!probeValid ? QStringLiteral("模拟探头故障：通道被配置为无效")
+                                                : QStringLiteral("模拟温度计算结果不是有限数值"))});
         }
         publish(channels);
         emit connectionChanged(complete ? TemperatureConnectionState::Ready : TemperatureConnectionState::Error,
@@ -137,6 +158,7 @@ public:
     {
         deadline_->setSingleShot(true);
         connect(socket_, &QTcpSocket::connected, this, [this] {
+            qCInfo(logAcquisition) << "温度 TCP 已连接" << "host=" << config_.host << "port=" << config_.port;
             deadline_->stop();
             emit connectionChanged(TemperatureConnectionState::WaitingForData, QStringLiteral("已连接，等待可信温度"));
             poll_->start(config_.pollIntervalMs);
@@ -164,6 +186,7 @@ public:
     }
     void disconnectDevice() override
     {
+        qCInfo(logAcquisition) << "温度设备主动断开" << "device=" << config_.deviceId << "session=" << session_;
         close();
         invalidate(QStringLiteral("设备已断开"));
         emit connectionChanged(TemperatureConnectionState::Disconnected, QStringLiteral("温度设备已断开"));
@@ -178,6 +201,14 @@ private:
     void fail(const QString& reason)
     {
         if (closing_) { return; }
+        qCWarning(logAcquisition) << "温度通信失败" << "reason=" << reason
+            << "device=" << config_.deviceId << "session=" << session_
+            << "host=" << config_.host << "port=" << config_.port << "unitId=" << config_.unitId
+            << "socketState=" << socket_->state() << "socketError=" << socket_->error()
+            << "socketErrorText=" << socket_->errorString() << "pending=" << pending_
+            << "transaction=" << transaction_ << "firstChannel=" << firstChannel_ << "count=" << count_
+            << "timeoutMs=" << config_.requestTimeoutMs << "bufferBytes=" << buffer_.size()
+            << "bufferHex=" << buffer_.left(256).toHex(' ');
         close();
         invalidate(reason);
         emit connectionChanged(TemperatureConnectionState::Error, reason);
@@ -212,12 +243,17 @@ private:
             const QByteArray frame = buffer_.left(6 + length);
             buffer_.remove(0, 6 + length);
             if (!pending_ || qFromBigEndian<quint16>(frame.constData()) != transaction_) { continue; }
-            if (static_cast<quint8>(frame[6]) != config_.unitId) { fail(QStringLiteral("温度响应站号不匹配")); return; }
+            if (static_cast<quint8>(frame[6]) != config_.unitId) {
+                fail(QStringLiteral("温度响应站号不匹配：expected=%1 actual=%2 frame=%3")
+                    .arg(config_.unitId).arg(static_cast<quint8>(frame[6])).arg(QString::fromLatin1(frame.toHex(' ')))); return;
+            }
             if (static_cast<quint8>(frame[7]) == 0x84) {
-                fail(QStringLiteral("Modbus 温度读取异常，代码 %1").arg(static_cast<quint8>(frame[8]))); return;
+                fail(QStringLiteral("Modbus 温度读取异常，代码 %1 frame=%2")
+                    .arg(static_cast<quint8>(frame[8])).arg(QString::fromLatin1(frame.toHex(' ')))); return;
             }
             if (frame[7] != 4 || length != 3 + count_ * 2 || static_cast<quint8>(frame[8]) != count_ * 2) {
-                fail(QStringLiteral("温度响应功能码或长度不匹配")); return;
+                fail(QStringLiteral("温度响应功能码或长度不匹配：expectedFunction=4 expectedLength=%1 expectedBytes=%2 frame=%3")
+                    .arg(3 + count_ * 2).arg(count_ * 2).arg(QString::fromLatin1(frame.toHex(' ')))); return;
             }
             deadline_->stop(); pending_ = false;
             QVector<TemperatureChannelSample> channels;
@@ -228,7 +264,8 @@ private:
                 complete = complete && valid;
                 channels.append({channel, valid ? static_cast<double>(raw) / 10.0 : 0.0,
                     valid ? DataQuality::Good : DataQuality::Invalid,
-                    valid ? QString() : QStringLiteral("探头未接入或线路故障")});
+                    valid ? QString() : QStringLiteral("探头未接入或线路故障：raw=-5000 (0xEC78)，寄存器地址=%1")
+                        .arg(channel - 1)});
             }
             publish(channels);
             emit connectionChanged(complete ? TemperatureConnectionState::Ready : TemperatureConnectionState::Error,
@@ -335,6 +372,7 @@ void TemperatureDeviceService::initialize()
     QString error;
     const TemperatureConfiguration config = globalConfiguration();
     const bool valid = validateConfiguration(config, &error);
+    if (!valid) { qCWarning(logAcquisition) << "温度配置无效，未启动连接" << "reason=" << error; }
     {
         const QMutexLocker lock(&mutex_);
         configuration_ = config;
