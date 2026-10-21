@@ -11,7 +11,7 @@ enum class EddyCurrentTestType
 };
 
 inline constexpr double kMaximumTestSpeedMetersPerSecond = 5.0;
-inline constexpr double kMaximumTestAccelerationMetersPerSecondSquared = 25.0;
+inline constexpr double kMaximumTestAccelerationMetersPerSecondSquared = 26.0;
 inline constexpr double kDefaultAccelerationStartMeters = 0.0;
 inline constexpr double kDefaultAccelerationDistanceMeters = 0.5;
 inline constexpr double kDefaultEndPositionMeters = 1.7;

@@ -362,7 +362,7 @@ bool calculatePtpMotionParameters(const TestMotionParameters& parameters,
     if (!std::isfinite(accelerationMetersPerSecondSquared)
         || accelerationMetersPerSecondSquared
                > kMaximumTestAccelerationMetersPerSecondSquared) {
-        setError(errorMessage, QStringLiteral("计算加速度和减速度不能超过 25 m/s2。"));
+        setError(errorMessage, QStringLiteral("计算加速度和减速度不能超过 26 m/s2。"));
         return false;
     }
 
