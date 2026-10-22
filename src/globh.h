@@ -11,6 +11,8 @@ inline int g_temperatureUnitId = 1;
 inline int g_temperaturePollIntervalMs = 500;
 inline int g_temperatureRequestTimeoutMs = 1000;
 inline int g_temperatureStaleAfterMs = 2000;
+// 所有通道统一修正：发布温度 = 采集温度 - 偏移值（℃），模拟采集同样生效。
+inline double g_temperatureOffsetCelsius = 78.4;
 
 // 依次为触发温度、恢复温度、触发持续毫秒、恢复持续毫秒。
 inline TemperatureLimitParameters g_temperatureWarning{30.0, 28.0, 1000, 1000};

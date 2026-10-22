@@ -56,7 +56,8 @@ protected:
             << "session=" << session_ << "backend=" << config.backend
             << "host=" << config.host << "port=" << config.port << "unitId=" << config.unitId
             << "channels=" << config.channels << "pollMs=" << config.pollIntervalMs
-            << "timeoutMs=" << config.requestTimeoutMs << "staleMs=" << config.staleAfterMs;
+            << "timeoutMs=" << config.requestTimeoutMs << "staleMs=" << config.staleAfterMs
+            << "offsetCelsius=" << g_temperatureOffsetCelsius;
         emit sessionStarted(config.deviceId, session_);
     }
     void publish(QVector<TemperatureChannelSample> channels)
@@ -68,7 +69,14 @@ protected:
         snapshot.sampledAtUtc = QDateTime::currentDateTimeUtc();
         snapshot.observedMonoMs = deviceObservationMonoMs();
         snapshot.channels = std::move(channels);
-        for (const TemperatureChannelSample& sample : snapshot.channels) {
+        for (TemperatureChannelSample& sample : snapshot.channels) {
+            if (sample.quality == DataQuality::Good) {
+                sample.celsius -= g_temperatureOffsetCelsius;
+                if (!std::isfinite(sample.celsius)) {
+                    sample.quality = DataQuality::Invalid;
+                    sample.detail = QStringLiteral("温度偏移修正结果不是有限数值");
+                }
+            }
             if (sample.quality != DataQuality::Good) {
                 if (!channelErrors_.contains(sample.channel) || channelErrors_.value(sample.channel) != sample.detail) {
                     qCWarning(logAcquisition) << "温度通道无效" << "device=" << config_.deviceId
