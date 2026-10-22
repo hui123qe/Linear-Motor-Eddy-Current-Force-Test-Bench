@@ -290,10 +290,10 @@ DeviceStatusPanel::DeviceStatusPanel(QWidget* parent)
             this, &DeviceStatusPanel::updateTemperatureReadings, Qt::QueuedConnection);
     connect(&temperatureService, &TemperatureDeviceService::connectionChanged, this,
         [this](TemperatureConnectionState state, const QString& detail) {
-            const QString backend = TemperatureDeviceService::instance().configuration().backend == "simulator"
-                ? QStringLiteral("虚拟") : QStringLiteral("真实");
+            const QString prefix = TemperatureDeviceService::instance().configuration().backend == "simulator"
+                ? QStringLiteral("虚拟·") : QString();
             const QStringList names{QStringLiteral("离线"), QStringLiteral("连接中"), QStringLiteral("待数据"), QStringLiteral("在线"), QStringLiteral("异常")};
-            temperaturePill_->setText(backend + QStringLiteral("·") + names.at(static_cast<int>(state)));
+            temperaturePill_->setText(prefix + names.at(static_cast<int>(state)));
             temperaturePill_->setLevel(state == TemperatureConnectionState::Ready ? "ok"
                 : (state == TemperatureConnectionState::Error ? "danger" : "neutral"));
             temperatureCard_->setToolTip(detail);
