@@ -7,17 +7,17 @@
         "repeatCount": 1
     },
     "ratedSpeedTest": {
-        "accelerationStartMeters": 0.0,
-        "accelerationDistanceMeters": 0.5,
-        "endPositionMeters": 1.7,
+        "accelerationStartMeters": 0.12266,
+        "accelerationDistanceMeters": 0.48651,
+        "endPositionMeters": 1.82266,
         "speedMetersPerSecond": 3.0,
         "acquisitionStartMeters": 0.5,
         "acquisitionEndMeters": 1.2
     },
     "variableSpeedTest": {
-        "accelerationStartMeters": 0.1,
-        "accelerationDistanceMeters": 0.5,
-        "endPositionMeters": 1.7,
+        "accelerationStartMeters": 0.12266,
+        "accelerationDistanceMeters": 0.48651,
+        "endPositionMeters": 1.82266,
         "speedMetersPerSecond": 3.0,
         "acquisitionStartMeters": 0.5,
         "acquisitionEndMeters": 1.2
